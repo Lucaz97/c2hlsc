@@ -66,7 +66,7 @@ if mode == "standard":
     # run catapult and get the error
     print("Running catapult")
     subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
-
+ 
 
     # parse log
     with open("catapult.log", "r") as f:
