@@ -1,0 +1,258 @@
+## HLS DC synthesis script
+## Generated for stage extract
+
+# change the following to turn off/on timing reporting
+set enable_timing_reporting true
+set compile_seqmap_enable_output_inversion true
+set_host_options -max_cores 1
+
+puts "-- Note: Design Compiler Started"
+
+
+if {[regexp -all {[\s\$]} [file normalize [info script]]] != 0} {
+  puts "Error: Current working directory: \"[info script]\" contains non-standard characters. Please re-run from a different directory."
+  exit 2
+}
+
+set enable_page_mode "false"
+set timing_input_port_default_clock true
+
+if { [file isdirectory "gate_synthesis_dc"] } {
+  puts "Note: Removing old directory gate_synthesis_dc"
+  file delete -force -- "gate_synthesis_dc"
+}
+puts "Note: Creating directory gate_synthesis_dc"
+file mkdir "gate_synthesis_dc"
+cd "gate_synthesis_dc"
+
+set hdlin_while_loop_iterations 1000
+## Set the variable for file path prefixing 
+set RTL_TOOL_SCRIPT_DIR [file dirname [file normalize [info script]]]
+puts "-- RTL_TOOL_SCRIPT_DIR is set to '$RTL_TOOL_SCRIPT_DIR' "
+set MGC_HOME /eda/mentor/Siemens_EDA/Catapult_Synthesis_2023.1_2/Mgc_home
+
+## Initialize DC-HLS variables
+set hls_status 0
+
+proc run_cmd { cmd errstr } {
+  upvar hls_status hls_status
+  puts $cmd
+  set retVal {}
+  if { !$hls_status } {
+    if { [catch { set retVal [uplevel 1 [list eval $cmd] ] } ] } {
+      puts "Error: Unable to $errstr."
+      set hls_status 1
+    }
+  } else {
+    puts "Error: $errstr skipped due to previous errors."
+  }
+  set retVal
+}
+
+# Source custom DesignCompiler script for specified stage
+# stage is one of: initial analyze synthesis reports final terminate
+proc source_custom_script { stage } {
+   global env
+   if { [info exists env(DesignCompiler_CustomScriptDirPath)] } {
+      set dir_path $env(DesignCompiler_CustomScriptDirPath)
+      if { $dir_path ne "" } {
+         set script [file join $dir_path dc_${stage}.tcl]
+         if { [file exists $script] } {
+            set cmd "source $script"
+            set msg [list run custom script $script]
+            uplevel 1 [list run_cmd $cmd $msg]
+         }
+      }
+   }
+}
+
+proc get_slack { reportfile  } {
+  #Return WNS from qor report
+  set slack [expr {1e9}]
+  if {[grep_log "^  Design  WNS" $reportfile  slk]} {
+     if {$slk < $slack} {
+        set slack $slk
+     }
+  }
+  return $slack
+}
+
+proc grep_log {str log var} {
+# First unset return variable, if it exists
+    catch {uplevel 1 unset $var}
+    if {[catch {exec grep $str $log} rsl]} {
+       # No error, just don't set 'var' because calling code
+       # depends on whether var is set 
+       return false
+    }
+    # skip 15 spaces
+    set rsl [string range $rsl 15 end]
+    set rsl [string trim $rsl]
+    if {[llength $rsl] > 1} {
+       set rsl [lindex $rsl 0]
+    }
+    uplevel 1 set $var $rsl
+    return true
+}
+
+
+# Force error for bad link_library
+set_message_info -id UID-3 -stop_on
+
+# Force error for unmapped cells
+set_message_info -id RPT-7 -stop_on
+set_message_info -id LINT-61 -stop_on
+
+# Source potential custom script
+source_custom_script initial
+## Configure technology settings
+set target_library NangateOpenCellLibrary_typical_ccs.db
+set link_library {* NangateOpenCellLibrary_typical_ccs.db dw_foundation.sldb standard.sldb}
+set synthetic_library {dw_foundation.sldb standard.sldb}
+
+## Configure design license usage
+set synlib_dont_get_license {}
+set synlib_wait_for_design_license {}
+
+## Prepare netlist dependencies
+
+## Define library WORK
+if { [file isdirectory "work"] } {
+  file delete -force -- "work"
+}
+puts "Note: Creating directory work"
+file mkdir "work"
+define_design_lib "WORK" -path "work"
+puts "Note: Mapped design library WORK => work"
+run_cmd {analyze -format "verilog" $RTL_TOOL_SCRIPT_DIR/concat_rtl.v} {analyze file 'concat_rtl.v'}
+
+## Elaborate design SubBytes 
+run_cmd {elaborate "SubBytes"} {elaborate SubBytes {}}
+
+set_multi_vth_constraint -reset
+
+
+# Source potential custom script
+source_custom_script analyze
+
+# Use buffers instead of assignment statements in the Verilog netlist,
+# per Design Compiler Reference Methodology recommendations
+set_fix_multiple_port_nets -all -buffer_constants
+
+##  Synthesize toplevel design
+
+## Apply SDC constraints
+read_sdc $RTL_TOOL_SCRIPT_DIR/concat_rtl.v.dc.sdc -version 1.7
+set auto_wire_load_selection false
+
+puts "[clock format [clock seconds] -format {%a %b %d %H:%M:%S %Z %Y}]"
+
+
+# Source potential custom script
+source_custom_script synthesis
+
+set_multi_vth_constraint -reset
+puts "-- Starting synthesis for design 'SubBytes'"
+uniquify
+set wait_ctrl_inst [find -hierarchy cell {*_triosy_obj_inst *_synci_inst *_staller_inst *_rsci*_inst}]
+if { [llength $wait_ctrl_inst ] > 0 } {
+  ungroup $wait_ctrl_inst -flatten
+}
+list_libs
+if { [lindex [split $compatibility_version "-"] 1] < "2007.03" } {
+  compile_ultra      
+} else {
+  compile_ultra        
+}
+
+report_qor
+report_power
+report_power -hierarchy -levels 1
+report_wire_load
+# Source potential custom script
+source_custom_script reports
+
+# Will report failure if unmapped cells (since LINT-61 has been marked as a fatal error)
+check_design -unmapped -nosplit
+
+set high_fanout_net_threshold 0
+puts "-- Requested 4 fractional digits for design 'SubBytes' timing"
+puts "-- Requested 3 fractional digits for design 'SubBytes' capacitance"
+puts "-- Tool output delay factor to nS: 1.0"
+puts "-- ToolID: '${sh_product_version}'"
+puts "-- Characterization mode: p2p "
+
+puts "-- Primary IO Resource IDs: 'state_rsc 1 __MGC__CTRL__ 0'"
+
+puts "-- Synthesis area report for design 'SubBytes'"
+report_area -hierarchy -designware -nosplit
+puts "-- END Synthesis area report for design 'SubBytes'"
+
+if { $enable_timing_reporting } {
+   puts "Timing reporting started "
+   set clk_candidates {0 INOUT clk clk 1 INOUT state_rsc_zin state_rsc_zin} 
+   set i_candidates {1 INOUT state_rsc_zin state_rsc_zin} 
+   set o_candidates {1 INOUT state_rsc_lzout state_rsc_lzout 1 INOUT state_rsc_zout state_rsc_zout 1 INOUT state_triosy_lz state_triosy_lz} 
+   foreach { orsid orsmode iclk ote } $clk_candidates {
+   puts "Timing reporting for orsid=$orsid orsmode=$orsmode iclk=$iclk ote=$ote "
+      foreach { irsid irsmode iport ite } $i_candidates {
+         if { [llength [get_clocks -quiet $iclk] ] > 0 && [llength [all_registers -clock $iclk ] ] > 0 } {
+            puts "-- Synthesis input_to_register:timing report for design 'SubBytes' '${irsid}' '${irsmode}' port '${ite}' '${orsid}' '${orsmode}' CLOCK '${ote}'"
+            report_timing -nosplit -significant_digits 4 -capacitance -from ${iport} -to [all_registers -data_pins -clock $iclk ] 
+            puts "-- END Synthesis input_to_register:timing report for design 'SubBytes' '${irsid}' '${irsmode}' port '${ite}' '${orsid}' '${orsmode}' CLOCK '${ote}'"
+         }
+      }
+   }
+   foreach { orsid orsmode oclk ote } $clk_candidates {
+      foreach { irsid irsmode iclk ite } $clk_candidates {
+         if { [llength [get_clocks -quiet ${iclk}] ] > 0 && [llength [get_clocks -quiet ${oclk}] ] > 0 && [llength [all_registers -clock ${iclk}] ] > 0 && [llength [all_registers -clock ${oclk}] ] > 0 } {
+            puts "-- Synthesis register_to_register:timing report for design 'SubBytes' '${irsid}' '${irsmode}' CLOCK '${ite}' '${orsid}' '${orsmode}' CLOCK '${ote}'"
+            report_timing -nosplit -significant_digits 4 -capacitance -from [all_registers -clock_pins -clock ${iclk}] -to [all_registers -data_pins -clock ${oclk}] 
+            puts "-- END Synthesis register_to_register:timing report for design 'SubBytes' '${irsid}' '${irsmode}' CLOCK '${ite}' '${orsid}' '${orsmode}' CLOCK '${ote}'"
+         }
+      }
+   }
+   foreach { orsid orsmode oport ote } $o_candidates {
+      foreach { irsid irsmode iclk ite } $clk_candidates {
+         if { [llength [get_clocks -quiet ${iclk}] ] > 0 && [llength [all_registers -clock ${iclk}] ] > 0 } {
+            puts "-- Synthesis register_to_output:timing report for design 'SubBytes' '${irsid}' '${irsmode}' CLOCK '${ite}' '${orsid}' '${orsmode}' port '${ote}'"
+            report_timing -nosplit -significant_digits 4 -capacitance -from [all_registers -clock_pins -clock ${iclk}] -to ${oport}
+            puts "-- END Synthesis register_to_output:timing report for design 'SubBytes' '${irsid}' '${irsmode}' CLOCK '${ite}' '${orsid}' '${orsmode}' port '${ote}'"
+         }
+      }
+   }
+   foreach { orsid orsmode oport ote } $o_candidates {
+      foreach { irsid irsmode iport ite } $i_candidates {
+         puts "-- Synthesis input_to_output:timing report for design 'SubBytes' '${irsid}' '${irsmode}' port '${ite}' '${orsid}' '${orsmode}' port '${ote}'"
+         report_timing -nosplit -significant_digits 4 -capacitance -from ${iport} -to ${oport}
+         puts "-- END Synthesis input_to_output:timing report for design 'SubBytes' '${irsid}' '${irsmode}' port '${ite}' '${orsid}' '${orsmode}' port '${ote}'"
+      }
+   }
+} else {
+   puts "Timing reporting turned off in the script "
+}
+if {$hls_status} {
+  puts "Warning: Check transcript for errors hls_status=$hls_status"
+}
+puts "[clock format [clock seconds] -format {%a %b %d %H:%M:%S %Z %Y}]"
+set dc_bin_fmt ddc
+if { [lindex [split $compatibility_version "-"] 1] < "2006.06" } {
+    set dc_bin_fmt db
+}
+write -hierarchy -format $dc_bin_fmt -output gate.dc.v.$dc_bin_fmt
+change_names -hierarchy -rules vhdl
+write -hierarchy -format vhdl -output /home/lc4976/GEMINI_HLS/scripting/Catapult_15/SubBytes.v1/./gate.dc.v.vhdl
+write_sdc /home/lc4976/GEMINI_HLS/scripting/Catapult_15/SubBytes.v1/./gate.dc.v.sdc
+write_sdf /home/lc4976/GEMINI_HLS/scripting/Catapult_15/SubBytes.v1/./gate.dc.v.sdf
+# Source potential custom script
+source_custom_script final
+
+cd ..
+
+puts "-- Synthesis finished for design 'SubBytes'"
+
+puts "-- Final RTL-to-Gate synthesis complete for 'SubBytes'"
+
+# Source potential custom script
+source_custom_script terminate
+
