@@ -1,8 +1,8 @@
 Running in mode:  streaming
 iteration  0
 Prompt:  Rewrite the CumulativeSums function to be compatible for HLS. The first task it to rewrite it such that it will get inferred as a streaming function,
-    to do so, I need to get rid of the global array and have the function take a parameter
-    to accept an element at each function call. The following is an example on how this can be done: // Vector fucntion
+        to do so, I need to get rid of the global array and have the function take a parameter
+        to accept an element at each function call. The following is an example on how this can be done: // Vector fucntion
 #define N 20
 #define TAPS 11
 int x[N];
@@ -51,7 +51,7 @@ void fir(int ∗y, int x) { // takes one element of x and produces one element o
         j++;
     }
 }
-    The function is 
+        The function is 
 #include <stdio.h>
 
 #define N 20000
@@ -76,7 +76,7 @@ CumulativeSums(int *is_random)
 
 
 
-    also include a main function that tests the code in the same way of the reference code: 
+        also include a main function that tests the code in the same way of the reference code: 
 int main(){
     int i;
     for (i = 0 ; i < N; i++){
@@ -88,71 +88,76 @@ int main(){
     printf("is_random = %d\n", is_random);
 }
 LLM RESPONSE:
-Below is the modified `CumulativeSums` function that is structured for HLS and operates as a streaming function. The global array has been eliminated, and instead, the function accepts individual elements at each call, updating the cumulative sums accordingly. I also included a `main` function for testing purposes.
+Here's the rewritten C code for the `CumulativeSums` function to make it compatible for HLS. The function is now a streaming function that accepts a single element at each call, and I've included the main function to test the code as well.
 
 ```c
 #include <stdio.h>
 
 #define N 20000
 
-// Function to perform cumulative sums in a streaming manner
-void CumulativeSums(int *is_random, int epsilon) {
-    static int S = 0, sup = 0, inf = 0;
-    
-    S += (epsilon ? 1 : -1);
+// Global array of 0s and 1s
+int epsilon[N]; 
 
+// Streaming function
+void CumulativeSums(int *is_random, int input) {
+    static int S = 0;
+    static int sup = 0;
+    static int inf = 0;
+    
+    if (input) {
+        S++;
+    } else {
+        S--;
+    }
+    
     if (S > sup) {
         sup++;
     }
+    
     if (S < inf) {
         inf--;
     }
 
-    // After processing all elements, determine if the series is random
-    static int count = 0;
-    count++;
-
-    if (count == N) {
-        if (sup < 397 && inf > -397) {
-            *is_random = 1;
-        } else {
-            *is_random = 0;
-        }
-        count = 0; // Reset the counter for the next use
-        S = 0;    // Reset S for fresh calculations
-        sup = 0;  // Reset sup for fresh calculations
-        inf = 0;  // Reset inf for fresh calculations
+    // Set is_random to 1 if within bounds, otherwise set to 0
+    if (sup < 397 && inf > -397) {
+        *is_random = 1;
+    } else {
+        *is_random = 0;
     }
 }
 
+// Main function to test the CumulativeSums function
 int main() {
-    int i;
-    int is_random = 0;
-
-    // Populate the epsilon array and call CumulativeSums for each element
-    for (i = 0; i < N; i++) {
-        int epsilon = (i * 73 % 7) == 0;
-        CumulativeSums(&is_random, epsilon);
+    // Initialize the epsilon array
+    for (int i = 0; i < N; i++) {
+        epsilon[i] = (i * 73 % 7 == 0) ? 1 : 0;  // using 1s and 0s
     }
 
-    printf("is_random = %d\n", is_random);
+    int is_random = 0;
 
+    // Call CumulativeSums for each element in epsilon
+    for (int i = 0; i < N; i++) {
+        CumulativeSums(&is_random, epsilon[i]);
+    }
+
+    // Print the final result
+    printf("is_random = %d\n", is_random);
     return 0;
 }
 ```
 
 ### Explanation:
-1. **CumulativeSums function**: 
-   - It takes an integer as an input parameter for `epsilon` rather than using a global array.
-   - It keeps track of cumulative `S`, and updates `sup` and `inf` accordingly.
-   - A counter (`count`) is introduced to determine when all N elements have been processed.
-   - Once all elements are processed, it computes and sets the value of `*is_random`. The function resets the internal states for potential further invocations.
+1. **`CumulativeSums` Function:**
+   - Now takes two parameters: a pointer to `is_random` and a single integer `input`.
+   - Makes use of static variables to retain state across function calls.
+   - The logic for updating `S`, `sup`, and `inf` remains unchanged.
 
-2. **Main Function**:
-   - It initializes `is_random`.
-   - It iteratively calls `CumulativeSums` for each `epsilon` derived from the condition in the loop.
+2. **Main Function:**
+   - Initializes the `epsilon` array with the specified logic to fill it with 0s and 1s.
+   - Iterates through the `epsilon` array, calling `CumulativeSums` for each element.
+   - Finally, it prints the `is_random` value.
 
-This design ensures that the function interacts with individual elements, making it suitable for streaming applications in HLS contexts.
+This code is structured to infer streaming behavior suitable for high-level synthesis tools.
 Compiling the code
 The code is correct
 b'is_random = 0\n'
