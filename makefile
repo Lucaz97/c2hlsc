@@ -11,3 +11,4 @@ runlog:
 	
 clean:
 	rm -rf Catapult*
+	rm -rf tmp/*

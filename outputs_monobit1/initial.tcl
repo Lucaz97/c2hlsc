@@ -4,7 +4,7 @@ solution options set /OnTheFly/VthAttributeType cell_lib
 solution options set /Input/TargetPlatform x86_64
 solution options set /Output/OutputVHDL false
 solution options set /Output/GenerateCycleNetlist false
-solution file add temp_dut.c -type C++
+solution file add tmp/Frequency_llm.c -type C++
 directive set -DESIGN_GOAL area
 directive set -SPECULATE true
 directive set -MERGEABLE true
@@ -51,7 +51,7 @@ directive set -PROTOTYPING_ENGINE oasys
 directive set -PIPELINE_RAMP_UP true
 go new
 go analyze
-solution design set CumulativeSums -top
+solution design set Frequency -top
 go compile
 solution library add nangate-45nm_beh -- -rtlsyntool DesignCompiler -vendor Nangate -technology 045nm
 go libraries

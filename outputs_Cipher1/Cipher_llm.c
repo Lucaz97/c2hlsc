@@ -37,7 +37,8 @@ static const uint8_t Rcon[11] = {
 
 #define getSBoxValue(num) (sbox[(num)])
 
-static void AddRoundKey(uint8_t round, state_t *state, const round_t *RoundKey)
+
+static void AddRoundKey(uint8_t round, state_t state, const round_t RoundKey)
 {
   uint8_t i;
   uint8_t j;
@@ -45,21 +46,105 @@ static void AddRoundKey(uint8_t round, state_t *state, const round_t *RoundKey)
   {
     for (j = 0; j < 4; ++j)
     {
-      (*state)[i][j] ^= (*RoundKey)[(((round * 4) * 4) + (i * 4)) + j];
+      state[i][j] ^= RoundKey[((round * 4) * 4) + (i * 4) + j];
     }
-
   }
-
 }
 
 
+static void SubBytes(state_t state)
+{
+  uint8_t i;
+  uint8_t j;
+  for (i = 0; i < 4; ++i)
+  {
+    for (j = 0; j < 4; ++j)
+    {
+      state[j][i] = sbox[state[j][i]];
+    }
+  }
+}
+
+
+static void ShiftRows(state_t state)
+{
+  uint8_t temp;
+  temp = state[0][1];
+  state[0][1] = state[1][1];
+  state[1][1] = state[2][1];
+  state[2][1] = state[3][1];
+  state[3][1] = temp;
+  
+  temp = state[0][2];
+  state[0][2] = state[2][2];
+  state[2][2] = temp;
+
+  temp = state[1][2];
+  state[1][2] = state[3][2];
+  state[3][2] = temp;
+
+  temp = state[0][3];
+  state[0][3] = state[3][3];
+  state[3][3] = state[2][3];
+  state[2][3] = state[1][3];
+  state[1][3] = temp;
+}
+
+static uint8_t xtime(uint8_t x)
+{
+  return (x << 1) ^ (((x >> 7) & 1) * 0x1b);
+}
+
+
+static void MixColumns(state_t state)
+{
+  uint8_t i;
+  uint8_t Tmp;
+  uint8_t Tm;
+  uint8_t t;
+  for (i = 0; i < 4; ++i)
+  {
+    t = state[i][0];
+    Tmp = (state[i][0] ^ state[i][1] ^ state[i][2] ^ state[i][3]);
+    Tm = state[i][0] ^ state[i][1];
+    Tm = xtime(Tm);
+    state[i][0] ^= Tm ^ Tmp;
+    Tm = state[i][1] ^ state[i][2];
+    Tm = xtime(Tm);
+    state[i][1] ^= Tm ^ Tmp;
+    Tm = state[i][2] ^ state[i][3];
+    Tm = xtime(Tm);
+    state[i][2] ^= Tm ^ Tmp;
+    Tm = state[i][3] ^ t;
+    Tm = xtime(Tm);
+    state[i][3] ^= Tm ^ Tmp;
+  }
+}
+
+
+static void Cipher(state_t state, const round_t RoundKey)
+{
+  uint8_t round = 0;
+  AddRoundKey(0, state, RoundKey);
+  for (round = 1; round <= 10; ++round)
+  {
+    SubBytes(state);
+    ShiftRows(state);
+    if (round < 10)
+    {
+      MixColumns(state);
+      AddRoundKey(round, state, RoundKey);
+    }
+  }
+  
+  AddRoundKey(10, state, RoundKey);
+}
+
 int main()
 {
-  uint8_t round = 0x0;
   state_t state = {{170, 187, 204, 221}, {171, 161, 26, 186}, {176, 193, 210, 228}, {189, 175, 250, 255}};
   const round_t RoundKey = {17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255, 0, 56, 52, 80, 133, 109, 82, 39, 13, 244, 248, 156, 193, 41, 22, 99, 193, 125, 207, 40, 32, 16, 157, 15, 45, 228, 101, 147, 236, 205, 115, 240, 45, 246, 67, 240, 157, 230, 222, 255, 176, 2, 187, 108, 92, 207, 200, 156, 113, 22, 157, 83, 23, 240, 67, 172, 167, 242, 248, 192, 251, 61, 48, 92, 138, 2, 215, 45, 48, 242, 148, 129, 151, 0, 108, 65, 108, 61, 92, 29, 230, 104, 115, 163, 23, 154, 231, 34, 128, 154, 139, 99, 236, 167, 215, 126, 10, 38, 128, 196, 75, 188, 103, 230, 203, 38, 236, 133, 39, 129, 59, 251, 45, 68, 143, 28, 71, 248, 232, 250, 140, 222, 4, 127, 171, 95, 63, 132, 134, 42, 208, 88, 136, 210, 56, 162, 4, 12, 60, 221, 175, 83, 3, 89, 41, 103, 27, 253, 101, 181, 35, 95, 97, 185, 31, 130, 206, 234, 28, 219, 231};
-  AddRoundKey(round, &state, &RoundKey);
-  printf("%d\n", round);
+  Cipher(state, RoundKey);
   for (int _i = 0; _i < 4; _i++)
   {
     for (int _j = 0; _j < 4; _j++)
@@ -77,5 +162,3 @@ int main()
 
   printf("\n");
 }
-
-

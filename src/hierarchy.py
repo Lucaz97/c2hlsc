@@ -84,9 +84,9 @@ def build_unit_test(func):
                     init = c_ast.InitList([c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']),str(val)) for val in outer_list]) for outer_list in value])
                 elif "{" in value:
                     # is a single array
-                    pointers_table[params_table[func][i][1]] = (1, len(value)) # array dimensions
                     value = value.replace("{", "[").replace("}", "]")
                     value = eval(value)
+                    pointers_table[params_table[func][i][1]] = (1, len(value)) # array dimensions and sizes
                     init = c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']), str(val)) for val in value])
                 else:
                     init =c_ast.Constant(c_ast.IdentifierType(['int']), value)
@@ -111,6 +111,8 @@ def build_unit_test(func):
 
     generator = c_generator.CGenerator()
     with open("tmp/" + func + ".c", "w") as f:
+        for child_func in set(calls_table[func]):
+            print(generator.visit(nodes_table[child_func]), file=f)
         print(generator.visit( nodes_table[func]), file=f)
         print(generator.visit(main_def), file=f)
 
