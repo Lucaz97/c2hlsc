@@ -1,13 +1,12 @@
 
-void Frequency(int *is_random)
+void Frequency(int * result)
 {
-        int             i;
-        double  sum;
+        int             i, sum;
 
-        sum = 0.0;
+        sum = 0;
         for ( i=0; i<N; i++ )
                 sum += 2*(int)epsilon[i]-1;
         
-        is_random = sum >= -29 && sum <= 29;
+        *result = sum;
 
 }

@@ -1,5 +1,5 @@
 void
-CumulativeSums(int *is_random)
+CumulativeSums(int * res_sup, int * res_inf)
 {
 	int		S, sup, inf, k;
 	S = 0;
@@ -12,7 +12,7 @@ CumulativeSums(int *is_random)
 		if ( S < inf )
 			inf--;
 	}
-	if (sup < 397 && inf > -397) *is_random =1;
-	else *is_random =0;
+	*res_sup = sup;
+	*res_inf = inf;
 }
 

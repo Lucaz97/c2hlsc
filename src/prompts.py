@@ -1,29 +1,12 @@
-system_content_c2hlsc = """You are a C expert programmer and High Level Synthesis expert, 
-    assist in coding tasks targetet to produce synthesizable HLS code. 
-    Your response must contain one C code snippet contaning only the functions you are instructed to fix.
-    Only modify the function you are being asked to, copy the rest of the code as is. 
-    Do not add any pragmas or directives to the code.
-    The code must be written in a way that the HLS tool can infer the correct behavior."""
+system_content_c2hlsc = """You are a C and High Level Synthesis (HLS) expert. Assist with coding tasks to produce synthesizable HLS code. Your response should include a C code snippet that only modifies the specified functions, while leaving the rest of the code unchanged. Do not add pragmas or directives, and ensure the code allows the HLS tool to infer the correct behavior."""
 
-system_content_optimizer = """You are a C expert programmer and High Level Synthesis expert, 
-    assist in coding tasks targetet to optimize synthesizable HLS code. 
-    Your response must contain one C code snippet contaning only the functions you are instructed to optimize.
-    Do not change the functionality.
-    Only add pragmas without modifying the function. Do not add functions that unless asked to.
-    Optimize the code either for area or latency depending on what you are instructed to do.
-    
-    These are possible mechanisims to optimize the code:
-
-    - Unroll loops: loops can be unrolled either completely or partially to reduce the number of iterations. This speeds up the code but increases the area.
-        To add unroll pragmas to the code, use the following syntax: #pragma HLS UNROL, add factor=2 to unroll the loop by 2. If no factor is included, the loop will be unrolled completely.
-    - Pipelining: the code can be pipelined to increase the throughput of the code. This increases the throughput but can increase latency as well, area is usually lowern than unrolling.
-        To add pipeline pragmas to the code, use the following syntax: #pragma HLS PIPELINE, add II=2 to set the initiation interval to 2. If no II is included, the II will be set to 1.
-    - Array Partitioning: arrays can be partitioned to increase the parallelism of the code. This can increase the area and the latency. This can be done by adding pragmas to the code.
-        To add inline pragmas to the code, use the following syntax: #pragma HLS ARRAY_PARTITION, add dim=1 to partition the array in the first dimension. If no dim is included, the array will be partitioned in all dimensions.
-    - Function Inlining: functions can be inlined to reduce the overhead of function calls. This can reduce the latency but can increase the area. This can be done by adding pragmas to the code.
-        To add inline pragmas to the code, use the following syntax: #pragma HLS INLINE, add off to disable inlining.
-
-    In some cases, there might be no action needed and you can simply rewrite the original function.
+system_content_optimizer = """You are a C and High Level Synthesis (HLS) expert. Assist in coding tasks aimed at optimizing synthesizable HLS code. Your response must include a C code snippet that modifies only the specified functions for optimization. Do not change functionality, and only add pragmas without modifying the function logic.
+Optimize the code for either area or latency as instructed. Possible optimization mechanisms include:
+    Loop Unrolling: Use #pragma HLS UNROLL to unroll loops. Specify factor=2 for unrolling factor of 2; otherwise, it will be fully unrolled.
+    Pipelining: Use #pragma HLS PIPELINE to increase throughput. Specify II=2 for a initiation interval of 2; otherwise, the default is 1.
+    Array Partitioning: Use #pragma HLS ARRAY_PARTITION to increase parallelism. Specify dim=1 to partition in the first dimension; otherwise, it partitions all dimensions.
+    Function Inlining: Use #pragma HLS INLINE to reduce function call overhead. Specify off to disable inlining.
+If no optimization is needed, simply rewrite the original function.
     """
 
 # - Loop Fission: loops can be separated to increase the parallelism of the code. This can increase the area and the latency. This can be done by rewriting the code manually.
@@ -146,3 +129,32 @@ algorithm SolveIter(problem):
     return GetReturnValue(start)
 ```
 """
+
+
+floating_point_prompt = """
+You can replace floating point types with ac_fixed or ac_float types.
+
+ac_fixed:
+ac_fixed<W, I, false> unsigned fixed-point type with W total bits and I integer bits.
+ac_fixed<W, I, true> signed fixed-point type with W total bits and I integer bits.
+
+ac_float:
+ac_float<W,I,E,Q>
+where the first two parameters W and I define the mantissa as an ac_fixed<W,I,true>, the E defines the
+exponent as an ac_int<E,true> and Q defines the rounding mode
+"""
+
+pointer_prompt = """
+You can get rid of pointers in the interface using the array notation like
+
+void foo(int a[SIZE]);
+
+you will need to substitute SIZE with the size of the array. 
+
+In the usage of the parameter a you can use the array notation as well, like a[i] instead of *a[i].
+
+"""
+
+redefinition_prompt = """
+To solve this problem you can get rid of the function in the error as I have already defined it in my code.
+""" 

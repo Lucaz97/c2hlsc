@@ -2,7 +2,7 @@ from openai import OpenAI
 import argparse
 import subprocess
 import yaml
-
+import anthropic 
 from prompts import *
 
 import os
@@ -18,11 +18,14 @@ if not os.path.exists("tmp"):
 calls_table = {}
 params_table = {}
 nodes_table = {}
-top = "Cipher"
 N = 16
-filename = 'inputs/AES/AES.c'
-models = ["gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o1-mini"]
+models = ["claude-3-5-sonnet-20240620","llama-3.1-70b-versatile","llama3.1-70b","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o1-mini", "llama3.1-405b", "llama3.1-8b"]
 llm_runs = {model: 0 for model in models}
+
+libs = """
+#include "../include/ac_float.h"
+#include "../include/ac_fixed.h"
+"""
 
 # array printer template
 array_printer = """
@@ -46,13 +49,40 @@ for(int _i = 0; _i < {size1}; _i++) {{
 # for hierarchical 
 def explore_calls(top, hierarchical_calls):
     for func in calls_table[top]:
-        if calls_table[func]:
+        if func in calls_table:
             explore_calls(func, hierarchical_calls)
         if func not in hierarchical_calls:
             hierarchical_calls.append(func)
-    hierarchical_calls.append(top)
+    if top not in hierarchical_calls:
+        hierarchical_calls.append(top)
     return hierarchical_calls
       
+def call_llm(model, message_list):
+    if "claude" in model:
+        system_content = message_list[0]["content"]
+        mlist = message_list[1:]
+        print(mlist)
+        message = client.messages.create(
+            model=model,
+            messages=mlist,
+            system=system_content,
+            temperature=0.2,
+            top_p=0.2,
+            max_tokens=4096
+        )
+        print("LLM RAW RESPONSE: ", message)
+        message_list.append({"role": "assistant", "content": message.content[0].text})
+        return message.content[0].text
+    else: 
+        completion = client.chat.completions.create(
+            model=model,
+            messages = message_list,
+            top_p=0.2,
+            temperature=0.2
+        )
+        print("LLM RAW RESPONSE: ", completion)
+        message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
+        return completion.choices[0].message.content
 
 
 def build_unit_test(func):
@@ -65,7 +95,7 @@ def build_unit_test(func):
         print(f"""gdb.execute("break {func}")""", file =f)
         print("""gdb.execute("run")""", file =f)
         
-        for i in range(20):
+        for i in range(1):
             for param in params_table[func]:
                 if isinstance(param[0], c_ast.PtrDecl):
                     print(f"""gdb.execute("p/x *{param[-1]}")""", file =f)
@@ -110,6 +140,7 @@ def build_unit_test(func):
                     init = c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']), str(val)) for val in value])
                 else:
                     init =c_ast.Constant(c_ast.IdentifierType(['int']), value)
+                    pointers_table[params_table[func][i][1]] = (0,0)
         if isinstance(params_table[func][i][0], c_ast.PtrDecl):
             main_def.body.block_items.append(c_ast.Decl(params_table[func][i][1], [], [], [], None, params_table[func][i][0].type, init, None))
         else:
@@ -118,12 +149,16 @@ def build_unit_test(func):
     main_def.body.block_items.append(c_ast.FuncCall(c_ast.ID(func), c_ast.ExprList([c_ast.ID(param[1]) if not isinstance(param[0], c_ast.PtrDecl) else c_ast.UnaryOp('&', c_ast.ID(param[1])) for param in params_table[func]])))
 
     # add prints
+    print(pointers_table)
     for i in range(n_params):
         if isinstance(params_table[func][i][0], c_ast.PtrDecl):
             if pointers_table[params_table[func][i][1]][0] == 2:
                 code_str = double_array_printer.format(name=params_table[func][i][1], size1=pointers_table[params_table[func][i][1]][1], size2=pointers_table[params_table[func][i][1]][2])
-            else:
+            elif pointers_table[params_table[func][i][1]][0] == 1:
                 code_str = array_printer.format(name=params_table[func][i][1], size=pointers_table[params_table[func][i][1]][1])
+            else:
+                main_def.body.block_items.append(c_ast.FuncCall(c_ast.ID("printf"), c_ast.ExprList([c_ast.Constant(c_ast.IdentifierType(['char']), f'"%d\\n"'), c_ast.ID(params_table[func][i][1])])))
+                continue
             for_ast = c_parser.CParser().parse(code_str).ext[0]
             main_def.body.block_items.extend(for_ast.body.block_items)
         else:
@@ -137,6 +172,19 @@ def build_unit_test(func):
             print(generator.visit(nodes_table[child_func]), file=f)
     with open("tmp/" + func + "_test.c", "w") as f:
         print(generator.visit(main_def), file=f)
+
+def getSignatures(func):
+    # get all the signatures of the functions called by func
+    sig_string = ""
+    for filename in processed:
+        with open(filename) as file:
+            code = file.read()
+            # find line that contains the function signature
+            for line in code.splitlines():
+                if filename.split("/")[1].split("_final")[0] in line:
+                    sig_string += line+";\n"
+                    break 
+    return sig_string
 
 class TopFunctionVisitor(c_ast.NodeVisitor):
      # this visitor needs to know the name of top module
@@ -220,10 +268,20 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
                 # # optimize this function
                 # return HLSC_optimizer(includes, orig_code, test_code, tcl, top_function, out_folder, processed, model, mode, opt_target)
         
-       
+        if "Floating-point"in error:
+            error += floating_point_prompt
+        elif "recursion" in error:
+            error += recursion_prompt
+        elif "pointer" in error:
+            error += pointer_prompt
 
-        std_prompt = f"""Help me rewrite the {top_function} function to be compatible with HLS: \n  {code_to_fix} \n The current problem is:" \n{error}
-        \n\n also include a main function that tests the code in the same way of the reference code: \n {test_code}"""
+        signatures = getSignatures(top_function)
+
+        std_prompt = f"""Help me rewrite the {top_function} function to be compatible with HLS: \n```\n{code_to_fix}```\n 
+        The following child functions and includes will be provided to with the following signature, assume them present in the code:
+        \n```{includes}\n{signatures}\n```\n
+        The current problem is:" \n{error}
+        \n\n also include a main function that tests the code in the same way of the reference code: \n```{test_code}\n```"""
 
         initial_prompt = std_prompt
 
@@ -234,9 +292,13 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             streaming_example = f.read()
         interface_prompt = f"""Rewrite the {top_function} function to be compatible for HLS. The first task it to rewrite it such that it will get inferred as a streaming function,
         to do so, I need to get rid of the global array and have the function take a parameter
-        to accept an element at each function call. The following is an example on how this can be done: \n {streaming_example}
+        to accept one element at each function call. The following is an example on how this can be done: \n {streaming_example}
         \nThe function is \n{code_to_fix}\n
-        also include a main function that tests the code in the same way of the reference code: \n{test_code}"""
+        If there is more than one loop one will need multiple if statements to differentiate the outer loops actions.
+        The final function must not contain loops.
+        Include a main function that tests the code in the same way of the reference code: \n{test_code}
+        Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
+        """
         initial_prompt = interface_prompt
 
     # initial message list
@@ -259,7 +321,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
                 print("Exiting due to too many iterations")
                 exit(1)
             if model == "adaptive":
-                model_name = "gpt-4o-mini" if i+j<6 else "gpt-4o"
+                model_name = "gpt-4o-mini" if i+j<4 else "gpt-4o"
             else: 
                 model_name = model
             print("Model: ", model_name)
@@ -267,24 +329,18 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             i+=1
             # prompt
             print("Prompt: ", message_list[-1]["content"])
-            completion = client.chat.completions.create(
-                model=model_name,
-                messages = message_list
-            )
+            response = call_llm(model_name, message_list)
             total_gpt_runs+=1
             print("LLM RESPONSE:")
-            print( completion.choices[0].message.content)
+            print( response)
             llm_runs[model_name] += 1
             # get c copde and create a file with it
-            c_code_dut = completion.choices[0].message.content.split("```c")[1].split("```")[0]
-
-            # update message_list
-            message_list.append(completion.choices[0].message)
-            #message_list.append({"role": "user", "content": "Help me rewrite the main function that tests the code to be compatible with your changes: \n" + test_code})
+            c_code_dut = response.split("```c")[1].split("```")[0]
 
             # new file
             llm_file = f"tmp/{top_function}_llm.c"
             with open(llm_file, "w") as f:
+                f.write(libs)
                 f.write(includes)
                 for proc in processed:
                     with open(f"{proc}", "r") as p:
@@ -294,14 +350,19 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
 
             # compile the file with gcc 
             print("Compiling the code")
-            log = subprocess.run(["gcc", llm_file, "-o", llm_file[:-2]], capture_output=True)
+            log = subprocess.run(["g++", llm_file, "-o", llm_file[:-2]], capture_output=True)
             if "error" in log.stderr.decode():
                 error = log.stderr.decode()
                 #only keep the first 3 lines
+                print("Error: ", error)
+
                 error = "\n".join(error.split("\n")[:3])
+                prompt = "There is an error in the code: \n" + error + ", please try again\n"
+                if "redefinition" in error:
+                    prompt += redefinition_prompt
                 # update message_list
-                print("There is an error in the code: ", error)
-                message_list.append({"role": "user", "content": "There is an error in the code: \n" + error + ", please try again"})
+                #print("There is an error in the code: ", error)
+                message_list.append({"role": "user", "content": prompt})
                 continue
 
             # make file for reference output
@@ -312,7 +373,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
                 f.write(test_code)
 
             # compile the reference file with gcc
-            subprocess.run(["gcc", orig_file, "-o", orig_file[:-2]])
+            subprocess.run(["g++", orig_file, "-o", orig_file[:-2]])
 
             # run the compiled files an    models = ["gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive"]d check the outputs match
             out_dut = subprocess.run([f"./{llm_file[:-2]}"], capture_output=True)
@@ -348,8 +409,19 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
                 print(error)
+                prompt = "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error
+                if "Floating-point"in error:
+                    prompt += floating_point_prompt
+                elif "recursion" in error:
+                    prompt += recursion_prompt
+                elif "pointer" in error:
+                    prompt += pointer_prompt
+
+                prompt += f"""Include a main function that tests the code in the same way of the reference code: \n{test_code}
+        Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
+"""        
                 message_list = [{"role": "system", "content": system_content_c2hlsc},
-                {"role": "user", "content": "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error}]
+                {"role": "user", "content": prompt}]
                 continue
             else:
                 error = None
@@ -385,10 +457,13 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
     v = TopFunctionVisitor(top_function)
     v.visit(ast)
     code_to_fix = c_generator.CGenerator().visit(v.top_node)
-
+    # get signatures
+    signatures = getSignatures(top_function)
     initial_prompt = f"""Update the {top_function} function to optimize it for HLS targetting {opt_target}.
-        The function is \n{code_to_fix}\n
-        also include a main function that tests the code in the same way of the reference code: \n{test_code}"""
+        The function is \n```\n{code_to_fix}\n```\n
+        The following child functions and includes will be provided to with the following signature, assume them present in the code:
+        \n```{includes}\n{signatures}\n```\n
+        You should include a main function that tests the code in the same way of the reference code: \n```\n{test_code}\n```"""
     
     message_list=[
             {"role": "system", "content": system_content_c2hlsc},
@@ -405,28 +480,23 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
             exit(2)
         while error != None:
             error = None
-            
-            model_name = "gpt-4o"
+            if model == "adaptive":
+                model_name =  "gpt-4o"
+            else: 
+                model_name = model
             if i ==10:
+                print("Exiting due to too many iterations")
                 exit(1)
             i+=1
             # prompt
             print("Prompt: ", message_list[-1]["content"])
-            completion = client.chat.completions.create(
-                model=model_name,
-                messages = message_list
-            )
+            response = call_llm(model_name, message_list)
             total_gpt_runs+=1
             print("LLM RESPONSE:")
-            print( completion.choices[0].message.content)
+            print(response)
             llm_runs[model_name] += 1
             # get c copde and create a file with it
-            c_code_dut = completion.choices[0].message.content.split("```c")[1].split("```")[0]
-
-            # update message_list
-            message_list.append(completion.choices[0].message)
-            #message_list.append({"role": "user", "content": "Help me rewrite the main function that tests the code to be compatible with your changes: \n" + test_code})
-
+            c_code_dut = response.split("```c")[1].split("```")[0]
             # new file
             llm_file = f"tmp/{top_function}_llm_opt.c"
             with open(llm_file, "w") as f:
@@ -439,14 +509,19 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
 
             # compile the file with gcc 
             print("Compiling the code")
-            log = subprocess.run(["gcc", llm_file, "-o", llm_file[:-2]], capture_output=True)
+            log = subprocess.run(["g++", llm_file, "-o", llm_file[:-2]], capture_output=True)
             if "error" in log.stderr.decode():
                 error = log.stderr.decode()
                 #only keep the first 3 lines
+                print("Error: ", error)
                 error = "\n".join(error.split("\n")[:3])
                 # update message_list
+
+                prompt = "There is an error in the code: \n" + error + ", try again\n"
+                if "redefinition" in error:
+                    prompt += redefinition_prompt
                 print("There is an error in the code: ", error)
-                message_list.append({"role": "user", "content": "There is an error in the code: \n" + error + ", please try again"})
+                message_list.append({"role": "user", "content": prompt})
                 continue
 
             # make file for reference output
@@ -493,8 +568,12 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
                 print(error)
+                main_function = f"""
+Include a main function that tests the code in the same way of the reference code: \n{test_code}
+        Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
+        """
                 message_list = [{"role": "system", "content": system_content_optimizer},
-                {"role": "user", "content": "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error}]
+                {"role": "user", "content": "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error + main_function}]
                 continue
             else:
                 error = None
@@ -518,16 +597,31 @@ if __name__ == "__main__":
 
     parser.add_argument('config', type=str, help='yaml config file with the following fields: orig_code, test_code, includes, tcl, top_function')
     # model name optional argument from a list of models
-    modes = ["standard", "streaming"] # from yaml file
+    modes = ["standard", "streaming"] # from yaml file claude-3-5-sonnet-20240620
     parser.add_argument('--model', type=str, default="adaptive", choices=models, help='model name to use, default is gpt-3.5-turbo-0125')
     opt_target = ["area", "latency"]
     parser.add_argument('--opt_target', type=str, default="area", choices=opt_target, help='optimization target, default is area')
     args = parser.parse_args()
-    client = OpenAI()
-
     model = args.model
     if model != "adaptive":
         model_name = model
+    if "llama" in model:
+        model_name = "llama-3.1-70b-versatile"
+        model = model_name
+        client = OpenAI(
+        api_key = os.environ.get("LLAMA_API_KEY"),
+        base_url = "https://api.groq.com/openai/v1"
+        #base_url = "https://api.llama-api.com"
+        #base_url = "https://api.aimlapi.com"
+        )
+    elif "claude" in model:
+        model_name = model
+        client = anthropic.Anthropic(
+        # defaults to os.environ.get("ANTHROPIC_API_KEY")
+        )
+    else:
+        client = OpenAI()
+
     target = args.opt_target
     print("Model: ", model)
     print("Optimization target: ", target)
@@ -563,7 +657,7 @@ if __name__ == "__main__":
 
     top_function = config["top_function"]
     # out folder
-    out_folder = "outputs/"
+    out_folder = f"outputs_{top_function}/"
     if not os.path.exists(out_folder):
         os.makedirs(out_folder)
     if not hierarchical:
@@ -581,7 +675,10 @@ if __name__ == "__main__":
         v.visit(ast)
         hierarchical_calls = []
         processed = []
-        explore_calls(top, hierarchical_calls) # inits hierarchical_calls
+        print(calls_table)
+        explore_calls(top_function, hierarchical_calls) # inits hierarchical_calls
+
+        print("Hierarchical calls: ", hierarchical_calls)
         for func in hierarchical_calls:
             build_unit_test(func)
             with open(f"tmp/{func}.c", "r") as f:
@@ -623,4 +720,4 @@ if __name__ == "__main__":
         
     # copy important files
     subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"outputs/Catapult_{top_function}"])
-    subprocess.run(["cp", f"tmp/{top_function}_llm.c", "outputs/"])
+    subprocess.run(["cp", f"tmp/{top_function}_llm_opt.c", "outputs/"])
