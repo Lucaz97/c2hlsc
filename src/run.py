@@ -15,13 +15,17 @@ from subprocess import Popen, PIPE, STDOUT
 if not os.path.exists("tmp"):
     os.makedirs("tmp")
 
+
 calls_table = {}
 params_table = {}
 nodes_table = {}
 N = 16
 models = ["claude-3-5-sonnet-20240620","llama-3.1-70b-versatile","llama3.1-70b","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o1-mini", "llama3.1-405b", "llama3.1-8b"]
 llm_runs = {model: 0 for model in models}
-
+llm_input_tokens = {model: 0 for model in models}
+llm_output_tokens = {model: 0 for model in models}
+hls_runs = 0
+compile_runs = 0
 libs = """
 #include "../include/ac_float.h"
 #include "../include/ac_fixed.h"
@@ -72,20 +76,25 @@ def call_llm(model, message_list):
         )
         print("LLM RAW RESPONSE: ", message)
         message_list.append({"role": "assistant", "content": message.content[0].text})
+        llm_input_tokens[model] += message.usage.input_tokens
+        llm_output_tokens[model] += message.usage.output_tokens
         return message.content[0].text
     else: 
         completion = client.chat.completions.create(
             model=model,
             messages = message_list,
             top_p=0.2,
-            temperature=0.2
+            temperature=0.25
         )
         print("LLM RAW RESPONSE: ", completion)
         message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
+        llm_input_tokens[model] += completion.usage.prompt_tokens
+        llm_output_tokens[model] += completion.usage.completion_tokens
         return completion.choices[0].message.content
 
 
 def build_unit_test(func):
+    global compile_runs
     print("Building unit test for ", func)
     # get param values
     # build gdb script
@@ -106,6 +115,7 @@ def build_unit_test(func):
 
     # compile the file with gcc
     p= Popen(["gcc","-ggdb", "-g3", filename, "-o", f"tmp/to_debug"], stdout=PIPE, stderr=PIPE, text=True)
+    compile_runs += 1
     #run debug 
     p = Popen(["gdb"], stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=0, text=True)
     stdout_data, stderr_data = p.communicate(input=f"c\nsource tmp/{func}_gdb.py\n")
@@ -123,24 +133,37 @@ def build_unit_test(func):
     pointers_table = {} # associates a pointer with its dimensions and sizes
     for i in range(n_params):
         # find init values
-        for line in dbg_out.split("\n"):
+        lines = dbg_out.split("\n")
+        multiline = False
+        for j in range(len(lines)):
+            if not multiline:
+                line = lines[j]
+            else:
+                line = line + lines[j]
             if line.startswith(f"${i+1} = "):
-                value = line.split(" = ")[1]
-                if "{{" in value:
-                    # is a double array
-                    value = value.replace("{", "[").replace("}", "]")
-                    value = eval(value)
-                    pointers_table[params_table[func][i][1]] = (2, len(value), len(value[0])) # array dimensions and sizes
-                    init = c_ast.InitList([c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']),str(val)) for val in outer_list]) for outer_list in value])
-                elif "{" in value:
-                    # is a single array
-                    value = value.replace("{", "[").replace("}", "]")
-                    value = eval(value)
-                    pointers_table[params_table[func][i][1]] = (1, len(value)) # array dimensions and sizes
-                    init = c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']), str(val)) for val in value])
-                else:
-                    init =c_ast.Constant(c_ast.IdentifierType(['int']), value)
+                if lines[j+1].startswith("$") or lines[j+1].startswith("Breakpoint") or "process" in lines[j+1] or line.count("{") == line.count("}"):    
+                    multiline = False
+                    # is a pointer
                     pointers_table[params_table[func][i][1]] = (0,0)
+                    init = c_ast.Constant(c_ast.IdentifierType(['int']), "0")
+                    value = line.split(" = ")[1]
+                    if "{{" in value:
+                        # is a double array
+                        value = value.replace("{", "[").replace("}", "]")
+                        value = eval(value)
+                        pointers_table[params_table[func][i][1]] = (2, len(value), len(value[0])) # array dimensions and sizes
+                        init = c_ast.InitList([c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']),str(val)) for val in outer_list]) for outer_list in value])
+                    elif "{" in value:
+                        # is a single array
+                        value = value.replace("{", "[").replace("}", "]")
+                        value = eval(value)
+                        pointers_table[params_table[func][i][1]] = (1, len(value)) # array dimensions and sizes
+                        init = c_ast.InitList([c_ast.Constant(c_ast.IdentifierType(['int']), str(val)) for val in value])
+                    else:
+                        init =c_ast.Constant(c_ast.IdentifierType(['int']), value)
+                        pointers_table[params_table[func][i][1]] = (0,0)
+                else:
+                    multiline = True
         if isinstance(params_table[func][i][0], c_ast.PtrDecl):
             main_def.body.block_items.append(c_ast.Decl(params_table[func][i][1], [], [], [], None, params_table[func][i][0].type, init, None))
         else:
@@ -220,6 +243,8 @@ class FuncCallVisitor(c_ast.NodeVisitor):
 
 
 def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, processed, model="adaptive", mode="standard", opt_target="area"):
+    global compile_runs
+    global hls_runs
     # write initial c
     print("model: ", model)
     file_name = f"tmp/{top_function}_initial.c"
@@ -246,14 +271,14 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
         # run catapult and get the error
         print("Running catapult")
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
-    
+        hls_runs += 1
 
         # parse log
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
-                print(error)
+                print("Error: ", error)
             else:
                 print(f"{top_function} is correct, does not need any changes")
                 # write final file
@@ -292,11 +317,13 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             streaming_example = f.read()
         interface_prompt = f"""Rewrite the {top_function} function to be compatible for HLS. The first task it to rewrite it such that it will get inferred as a streaming function,
         to do so, I need to get rid of the global array and have the function take a parameter
-        to accept one element at each function call. The following is an example on how this can be done: \n {streaming_example}
-        \nThe function is \n{code_to_fix}\n
+        to accept one element at each function call. The following is an example on how this can be done: \n```\n{streaming_example}\n```\n
+        The following includes will be provided, assume them present in the code and do not repeat them:
+        \n```{includes}\n```\n
+        \nThe function is \n```\n{code_to_fix}\n```\n
         If there is more than one loop one will need multiple if statements to differentiate the outer loops actions.
         The final function must not contain loops.
-        Include a main function that tests the code in the same way of the reference code: \n{test_code}
+        Include a main function that tests the code in the same way of the reference code: \n```\n{test_code}```\n
         Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
         """
         initial_prompt = interface_prompt
@@ -313,11 +340,34 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
         # functionality check loop
         i = 0
         if j == 10:
-            exit(2)
+            with open(f"{out_folder}{top_function}.log", "w") as f:
+                for model in models:
+                    if llm_runs[model] == 0:
+                        continue
+                    print(f"{model} runs: {llm_runs[model]}", file=f)
+                    print(f"{model} input tokens: {llm_input_tokens[model]}", file=f)
+                    print(f"{model} output tokens: {llm_output_tokens[model]}", file=f)
+                    if hierarchical_calls:
+                        print(f"# of functions: {len(hierarchical_calls)}", file=f)
+                    print(f"HLS runs: {hls_runs}", file=f)
+                    print(f"Compile runs: {compile_runs}", file=f)
+            print("Exiting due to too many iterations")
+            exit(1)
         while error != None:
             error = None
             print("iteration ", i)
             if i ==10:
+                with open(f"{out_folder}{top_function}.log", "w") as f:
+                    for model in models:
+                        if llm_runs[model] == 0:
+                            continue
+                        print(f"{model} runs: {llm_runs[model]}", file=f)
+                        print(f"{model} input tokens: {llm_input_tokens[model]}", file=f)
+                        print(f"{model} output tokens: {llm_output_tokens[model]}", file=f)
+                        if hierarchical_calls:
+                            print(f"# of functions: {len(hierarchical_calls)}", file=f)
+                    print(f"HLS runs: {hls_runs}", file=f)
+                    print(f"Compile runs: {compile_runs}", file=f)
                 print("Exiting due to too many iterations")
                 exit(1)
             if model == "adaptive":
@@ -337,6 +387,9 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             # get c copde and create a file with it
             c_code_dut = response.split("```c")[1].split("```")[0]
 
+            # remove "#include lines"
+            c_code_dut = "\n".join([line for line in c_code_dut.split("\n") if not line.startswith("#include")])
+
             # new file
             llm_file = f"tmp/{top_function}_llm.c"
             with open(llm_file, "w") as f:
@@ -351,6 +404,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
             # compile the file with gcc 
             print("Compiling the code")
             log = subprocess.run(["g++", llm_file, "-o", llm_file[:-2]], capture_output=True)
+            compile_runs += 1
             if "error" in log.stderr.decode():
                 error = log.stderr.decode()
                 #only keep the first 3 lines
@@ -374,6 +428,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
 
             # compile the reference file with gcc
             subprocess.run(["g++", orig_file, "-o", orig_file[:-2]])
+            compile_runs += 1
 
             # run the compiled files an    models = ["gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive"]d check the outputs match
             out_dut = subprocess.run([f"./{llm_file[:-2]}"], capture_output=True)
@@ -402,13 +457,14 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
 
         print("Running catapult")
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+        hls_runs += 1
         j += 1
         # parse log
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
-                print(error)
+                print("Error: ", error)
                 prompt = "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error
                 if "Floating-point"in error:
                     prompt += floating_point_prompt
@@ -432,7 +488,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
                     code_to_optimize = c_code_dut.split("int main()")[0]
                     f.write(code_to_optimize)
                 # optimize this function
-                return HLSC_optimizer(includes, orig_code, test_code, tcl, top_function, out_folder, processed, model, mode, opt_target)
+                return HLSC_optimizer(includes, orig_code, code_to_optimize, test_code, tcl, top_function, out_folder, processed, model, mode, opt_target)
                 # with open(f"tmp/{top_function}_final.c", "w") as f:
                 #     # need to take out the main function
                 #     code_to_save = c_code_dut.split("int main()")[0]
@@ -441,22 +497,16 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
 
     print("The code is correct, number of gpt runs: ", total_gpt_runs)
 
-def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folder, processed, model="adaptive", mode="standard", opt_target="area"):
-
+def HLSC_optimizer (includes, orig_code, code_to_fix, test_code, tcl, top_function, out_folder, processed, model="adaptive", mode="standard", opt_target="area"):
+    global compile_runs
+    global hls_runs
     # write initial c
     file_name = f"tmp/{top_function}_initial_opt.c"
     with open(file_name, "w") as f:
         f.write(includes)
         f.write(orig_code)
 
-    # code to fix from orig code
-    # get only the top function
-    # parse orig code
-    ast = parse_file(file_name, use_cpp=True,
-                        cpp_args=r'-Iutils/fake_libc_include')
-    v = TopFunctionVisitor(top_function)
-    v.visit(ast)
-    code_to_fix = c_generator.CGenerator().visit(v.top_node)
+    
     # get signatures
     signatures = getSignatures(top_function)
     initial_prompt = f"""Update the {top_function} function to optimize it for HLS targetting {opt_target}.
@@ -477,6 +527,18 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
         # functionality check loop
         i = 0
         if j == 10:
+            with open(f"{out_folder}{top_function}.log", "w") as f:
+                for model in models:
+                    if llm_runs[model] == 0:
+                        continue
+                    print(f"{model} runs: {llm_runs[model]}", file=f)
+                    print(f"{model} input tokens: {llm_input_tokens[model]}", file=f)
+                    print(f"{model} output tokens: {llm_output_tokens[model]}", file=f)
+                    if hierarchical_calls:
+                        print(f"# of functions: {len(hierarchical_calls)}", file=f)
+                    print(f"HLS runs: {hls_runs}", file=f)
+                    print(f"Compile runs: {compile_runs}", file=f)
+            print("Exiting due to too many iterations")
             exit(2)
         while error != None:
             error = None
@@ -485,6 +547,17 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
             else: 
                 model_name = model
             if i ==10:
+                with open(f"{out_folder}{top_function}.log", "w") as f:
+                    for model in models:
+                        if llm_runs[model] == 0:
+                            continue
+                        print(f"{model} runs: {llm_runs[model]}", file=f)
+                        print(f"{model} input tokens: {llm_input_tokens[model]}", file=f)
+                        print(f"{model} output tokens: {llm_output_tokens[model]}", file=f)
+                        if hierarchical_calls:
+                            print(f"# of functions: {len(hierarchical_calls)}", file=f)
+                        print(f"HLS runs: {hls_runs}", file=f)
+                        print(f"Compile runs: {compile_runs}", file=f)
                 print("Exiting due to too many iterations")
                 exit(1)
             i+=1
@@ -497,6 +570,10 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
             llm_runs[model_name] += 1
             # get c copde and create a file with it
             c_code_dut = response.split("```c")[1].split("```")[0]
+
+            # remove "#include lines"
+            c_code_dut = "\n".join([line for line in c_code_dut.split("\n") if not line.startswith("#include")])
+
             # new file
             llm_file = f"tmp/{top_function}_llm_opt.c"
             with open(llm_file, "w") as f:
@@ -510,6 +587,7 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
             # compile the file with gcc 
             print("Compiling the code")
             log = subprocess.run(["g++", llm_file, "-o", llm_file[:-2]], capture_output=True)
+            compile_runs += 1
             if "error" in log.stderr.decode():
                 error = log.stderr.decode()
                 #only keep the first 3 lines
@@ -561,13 +639,14 @@ def HLSC_optimizer (includes, orig_code, test_code, tcl, top_function, out_folde
 
         print("Running catapult")
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+        hls_runs += 1
         j += 1
         # parse log
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
-                print(error)
+                print("Error: ", error)
                 main_function = f"""
 Include a main function that tests the code in the same way of the reference code: \n{test_code}
         Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
@@ -598,7 +677,7 @@ if __name__ == "__main__":
     parser.add_argument('config', type=str, help='yaml config file with the following fields: orig_code, test_code, includes, tcl, top_function')
     # model name optional argument from a list of models
     modes = ["standard", "streaming"] # from yaml file claude-3-5-sonnet-20240620
-    parser.add_argument('--model', type=str, default="adaptive", choices=models, help='model name to use, default is gpt-3.5-turbo-0125')
+    parser.add_argument('--model', type=str, default="claude-3-5-sonnet-20240620", choices=models, help='model name to use, default is gpt-3.5-turbo-0125')
     opt_target = ["area", "latency"]
     parser.add_argument('--opt_target', type=str, default="area", choices=opt_target, help='optimization target, default is area')
     args = parser.parse_args()
@@ -657,9 +736,14 @@ if __name__ == "__main__":
 
     top_function = config["top_function"]
     # out folder
-    out_folder = f"outputs_{top_function}/"
-    if not os.path.exists(out_folder):
-        os.makedirs(out_folder)
+    out_folder = f"outputs_{top_function}"
+    idx = 1
+    while os.path.exists(out_folder+"_"+model+"_"+str(idx)):
+        idx +=1 
+    out_folder = out_folder+"_"+model+"_"+str(idx) + "/"
+    os.makedirs(out_folder)
+    hierarchical_calls = []
+    processed = []
     if not hierarchical:
         C2HLSC(includes, orig_code, test_code, tcl, top_function, out_folder, [], model=model, mode=mode, opt_target=target)
     else:
@@ -673,8 +757,8 @@ if __name__ == "__main__":
                         cpp_args=r'-Iutils/fake_libc_include')
         v = HierarchyVisitor()
         v.visit(ast)
-        hierarchical_calls = []
-        processed = []
+        
+        
         print(calls_table)
         explore_calls(top_function, hierarchical_calls) # inits hierarchical_calls
 
@@ -710,14 +794,20 @@ if __name__ == "__main__":
                 capture = True
             if "Design Total" in line or "Total Reg" in line:
                 capture = False
-    with open(f"outputs/{top_function}.log", "w") as f:
+    with open(f"{out_folder}{top_function}.log", "w") as f:
         for model in models:
             if llm_runs[model] == 0:
                 continue
             print(f"{model} runs: {llm_runs[model]}", file=f)
+            print(f"{model} input tokens: {llm_input_tokens[model]}", file=f)
+            print(f"{model} output tokens: {llm_output_tokens[model]}", file=f)
+            if hierarchical_calls:
+                print(f"# of functions: {len(hierarchical_calls)}", file=f)
+        print(f"HLS runs: {hls_runs}", file=f)
+        print(f"Compile runs: {compile_runs}", file=f)
         print("")    
         print("".join(saved_lines), file=f)
         
     # copy important files
-    subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"outputs/Catapult_{top_function}"])
-    subprocess.run(["cp", f"tmp/{top_function}_llm_opt.c", "outputs/"])
+    subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"{out_folder}Catapult_{top_function}"])
+    subprocess.run(["cp", f"tmp/{top_function}_llm_opt.c", f"{out_folder}"])
