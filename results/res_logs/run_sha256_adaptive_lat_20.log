@@ -1,0 +1,2173 @@
+Model:  adaptive
+Optimization target:  latency
+Running in mode:  standard Hierarchical:  True
+{'sha256_transform': [], 'sha256_init': [], 'sha256_update': ['sha256_transform'], 'sha256_final': ['sha256_transform', 'memset', 'sha256_transform'], 'main': ['sha256_init', 'sha256_update', 'sha256_final', 'printf']}
+Hierarchical calls:  ['sha256_transform', 'sha256_update']
+Building unit test for  sha256_transform
+{'state': (1, 8), 'data': (1, 64)}
+model:  adaptive
+Running catapult
+Error:   $PROJECT_HOME/tmp/sha256_transform_initial.c(43): Unsupported synthesis feature 'pointers-to-arrays on the interface' (CIN-70)
+
+iteration  0
+Model:  gpt-4o-mini
+Prompt:  Help me rewrite the sha256_transform function to be compatible with HLS: 
+```
+void sha256_transform(state_t *state, data_t *data)
+{
+  unsigned int a;
+  unsigned int b;
+  unsigned int c;
+  unsigned int d;
+  unsigned int e;
+  unsigned int f;
+  unsigned int g;
+  unsigned int h;
+  unsigned int i;
+  unsigned int j;
+  unsigned int t1;
+  unsigned int t2;
+  unsigned int m[64];
+  for (i = 0, j = 0; i < 16; ++i, j += 4)
+    m[i] = ((((*data)[j] << 24) | ((*data)[j + 1] << 16)) | ((*data)[j + 2] << 8)) | (*data)[j + 3];
+
+  for (; i < 64; ++i)
+    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];
+
+  a = (*state)[0];
+  b = (*state)[1];
+  c = (*state)[2];
+  d = (*state)[3];
+  e = (*state)[4];
+  f = (*state)[5];
+  g = (*state)[6];
+  h = (*state)[7];
+  for (i = 0; i < 64; ++i)
+  {
+    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];
+    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));
+    h = g;
+    g = f;
+    f = e;
+    e = d + t1;
+    d = c;
+    c = b;
+    b = a;
+    a = t1 + t2;
+  }
+
+  (*state)[0] += a;
+  (*state)[1] += b;
+  (*state)[2] += c;
+  (*state)[3] += d;
+  (*state)[4] += e;
+  (*state)[5] += f;
+  (*state)[6] += g;
+  (*state)[7] += h;
+}
+
+```
+ 
+        The following child functions and includes will be provided with the following signature, assume them present in the code:
+        
+```#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+#define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+#define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+
+#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+#define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+typedef  unsigned char data_t[64];
+typedef  unsigned int state_t[8];
+typedef struct {
+	data_t data;
+	unsigned int datalen;
+	unsigned long long bitlen;
+	state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+
+```
+
+        The current problem is:" 
+ $PROJECT_HOME/tmp/sha256_transform_initial.c(43): Unsupported synthesis feature 'pointers-to-arrays on the interface' (CIN-70)
+
+You can get rid of pointers in the interface using the array notation like
+
+void foo(int a[SIZE]);
+
+you will need to substitute SIZE with the size of the array. 
+
+In the usage of the parameter a you can use the array notation as well, like a[i] instead of *a[i].
+
+
+        
+
+ also include a main function that tests the code in the same way of the reference code: 
+```int main()
+{
+  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};
+  sha256_transform(&state, &data);
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+}
+
+
+
+```
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK70kK3t3WavYb8UVVDEvClifNr6c', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='Here is the modified `sha256_transform` function that is compatible with HLS, along with the `main` function for testing. The changes include replacing pointer usage with array notation to avoid the unsupported synthesis feature.\n\n```c\nvoid sha256_transform(state_t state, data_t data)\n{\n  unsigned int a;\n  unsigned int b;\n  unsigned int c;\n  unsigned int d;\n  unsigned int e;\n  unsigned int f;\n  unsigned int g;\n  unsigned int h;\n  unsigned int i;\n  unsigned int j;\n  unsigned int t1;\n  unsigned int t2;\n  unsigned int m[64];\n  \n  for (i = 0, j = 0; i < 16; ++i, j += 4)\n    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];\n\n  for (; i < 64; ++i)\n    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];\n\n  a = state[0];\n  b = state[1];\n  c = state[2];\n  d = state[3];\n  e = state[4];\n  f = state[5];\n  g = state[6];\n  h = state[7];\n  \n  for (i = 0; i < 64; ++i)\n  {\n    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];\n    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));\n    h = g;\n    g = f;\n    f = e;\n    e = d + t1;\n    d = c;\n    c = b;\n    b = a;\n    a = t1 + t2;\n  }\n\n  state[0] += a;\n  state[1] += b;\n  state[2] += c;\n  state[3] += d;\n  state[4] += e;\n  state[5] += f;\n  state[6] += g;\n  state[7] += h;\n}\n\nint main()\n{\n  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};\n  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};\n  \n  sha256_transform(state, data);\n  \n  for (int _i = 0; _i < 8; _i++)\n  {\n    printf("%d ", state[_i]);\n  }\n\n  printf("\\n");\n  for (int _i = 0; _i < 64; _i++)\n  {\n    printf("%d ", data[_i]);\n  }\n\n  printf("\\n");\n}\n```\n\n### Key Changes:\n1. The function signature of `sha256_transform` has been changed to accept `state_t state` and `data_t data` directly instead of using pointers.\n2. All references to `(*state)[i]` and `(*data)[j]` have been replaced with `state[i]` and `data[j]`, respectively.\n3. The `main` function remains unchanged, as it already correctly initializes and tests the `sha256_transform` function. \n\nThis code should now be compatible with HLS tools, allowing for proper synthesis without pointer-related issues.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729356874, model='gpt-4o-mini-2024-07-18', object='chat.completion', system_fingerprint='fp_482c22a7bc', usage=CompletionUsage(completion_tokens=1163, prompt_tokens=2162, total_tokens=3325, prompt_tokens_details={'cached_tokens': 1920}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+Here is the modified `sha256_transform` function that is compatible with HLS, along with the `main` function for testing. The changes include replacing pointer usage with array notation to avoid the unsupported synthesis feature.
+
+```c
+void sha256_transform(state_t state, data_t data)
+{
+  unsigned int a;
+  unsigned int b;
+  unsigned int c;
+  unsigned int d;
+  unsigned int e;
+  unsigned int f;
+  unsigned int g;
+  unsigned int h;
+  unsigned int i;
+  unsigned int j;
+  unsigned int t1;
+  unsigned int t2;
+  unsigned int m[64];
+  
+  for (i = 0, j = 0; i < 16; ++i, j += 4)
+    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
+
+  for (; i < 64; ++i)
+    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];
+
+  a = state[0];
+  b = state[1];
+  c = state[2];
+  d = state[3];
+  e = state[4];
+  f = state[5];
+  g = state[6];
+  h = state[7];
+  
+  for (i = 0; i < 64; ++i)
+  {
+    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];
+    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));
+    h = g;
+    g = f;
+    f = e;
+    e = d + t1;
+    d = c;
+    c = b;
+    b = a;
+    a = t1 + t2;
+  }
+
+  state[0] += a;
+  state[1] += b;
+  state[2] += c;
+  state[3] += d;
+  state[4] += e;
+  state[5] += f;
+  state[6] += g;
+  state[7] += h;
+}
+
+int main()
+{
+  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};
+  
+  sha256_transform(state, data);
+  
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+}
+```
+
+### Key Changes:
+1. The function signature of `sha256_transform` has been changed to accept `state_t state` and `data_t data` directly instead of using pointers.
+2. All references to `(*state)[i]` and `(*data)[j]` have been replaced with `state[i]` and `data[j]`, respectively.
+3. The `main` function remains unchanged, as it already correctly initializes and tests the `sha256_transform` function. 
+
+This code should now be compatible with HLS tools, allowing for proper synthesis without pointer-related issues.
+Compiling the code
+The code is correct
+b'883604356 1722112173 1361309521 -1644760932 431716477 -990806266 1022515149 1275567721 \n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 128 0 0 0 0 0 0 0 \n'
+b'883604356 1722112173 1361309521 -1644760932 431716477 -990806266 1022515149 1275567721 \n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 128 0 0 0 0 0 0 0 \n'
+The code is functionally correct, number of iterations: 1
+Running catapult
+The code is correct
+Prompt:  Update the sha256_transform function to optimize it for HLS targetting latency.
+        The function is 
+```
+
+void sha256_transform(state_t state, data_t data)
+{
+  unsigned int a;
+  unsigned int b;
+  unsigned int c;
+  unsigned int d;
+  unsigned int e;
+  unsigned int f;
+  unsigned int g;
+  unsigned int h;
+  unsigned int i;
+  unsigned int j;
+  unsigned int t1;
+  unsigned int t2;
+  unsigned int m[64];
+  
+  for (i = 0, j = 0; i < 16; ++i, j += 4)
+    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
+
+  for (; i < 64; ++i)
+    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];
+
+  a = state[0];
+  b = state[1];
+  c = state[2];
+  d = state[3];
+  e = state[4];
+  f = state[5];
+  g = state[6];
+  h = state[7];
+  
+  for (i = 0; i < 64; ++i)
+  {
+    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];
+    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));
+    h = g;
+    g = f;
+    f = e;
+    e = d + t1;
+    d = c;
+    c = b;
+    b = a;
+    a = t1 + t2;
+  }
+
+  state[0] += a;
+  state[1] += b;
+  state[2] += c;
+  state[3] += d;
+  state[4] += e;
+  state[5] += f;
+  state[6] += g;
+  state[7] += h;
+}
+
+
+```
+
+        The following child functions and includes will be provided to with the following signature, assume them present in the code:
+        
+```#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+#define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+#define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+
+#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+#define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+typedef  unsigned char data_t[64];
+typedef  unsigned int state_t[8];
+typedef struct {
+	data_t data;
+	unsigned int datalen;
+	unsigned long long bitlen;
+	state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+
+```
+
+        You should include a main function that tests the code in the same way of the reference code: 
+```
+int main()
+{
+  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};
+  sha256_transform(&state, &data);
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+}
+
+
+
+```
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK71hsosKkF5x5NkQNAvHW76SnvIl', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='To optimize the `sha256_transform` function for latency, we can apply loop unrolling to the loops within the function. This will help reduce the number of iterations and thus decrease the latency. Here\'s the optimized code:\n\n```c\nvoid sha256_transform(state_t state, data_t data)\n{\n  unsigned int a;\n  unsigned int b;\n  unsigned int c;\n  unsigned int d;\n  unsigned int e;\n  unsigned int f;\n  unsigned int g;\n  unsigned int h;\n  unsigned int i;\n  unsigned int j;\n  unsigned int t1;\n  unsigned int t2;\n  unsigned int m[64];\n\n  // Unroll the loop for m[i] initialization\n  #pragma hls_unroll yes\n  for (i = 0, j = 0; i < 16; ++i, j += 4)\n    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];\n\n  // Unroll the loop for m[i] calculation\n  #pragma hls_unroll yes\n  for (; i < 64; ++i)\n    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];\n\n  a = state[0];\n  b = state[1];\n  c = state[2];\n  d = state[3];\n  e = state[4];\n  f = state[5];\n  g = state[6];\n  h = state[7];\n\n  // Unroll the main loop\n  #pragma hls_unroll yes\n  for (i = 0; i < 64; ++i)\n  {\n    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];\n    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));\n    h = g;\n    g = f;\n    f = e;\n    e = d + t1;\n    d = c;\n    c = b;\n    b = a;\n    a = t1 + t2;\n  }\n\n  state[0] += a;\n  state[1] += b;\n  state[2] += c;\n  state[3] += d;\n  state[4] += e;\n  state[5] += f;\n  state[6] += g;\n  state[7] += h;\n}\n\nint main()\n{\n  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};\n  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};\n  sha256_transform(state, data);\n  for (int _i = 0; _i < 8; _i++)\n  {\n    printf("%d ", state[_i]);\n  }\n\n  printf("\\n");\n  for (int _i = 0; _i < 64; _i++)\n  {\n    printf("%d ", data[_i]);\n  }\n\n  printf("\\n");\n}\n```\n\nIn this optimized version, the loops are fully unrolled to minimize latency. This approach increases the area usage but achieves the goal of reducing latency.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729356933, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1128, prompt_tokens=2154, total_tokens=3282, prompt_tokens_details={'cached_tokens': 0}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+To optimize the `sha256_transform` function for latency, we can apply loop unrolling to the loops within the function. This will help reduce the number of iterations and thus decrease the latency. Here's the optimized code:
+
+```c
+void sha256_transform(state_t state, data_t data)
+{
+  unsigned int a;
+  unsigned int b;
+  unsigned int c;
+  unsigned int d;
+  unsigned int e;
+  unsigned int f;
+  unsigned int g;
+  unsigned int h;
+  unsigned int i;
+  unsigned int j;
+  unsigned int t1;
+  unsigned int t2;
+  unsigned int m[64];
+
+  // Unroll the loop for m[i] initialization
+  #pragma hls_unroll yes
+  for (i = 0, j = 0; i < 16; ++i, j += 4)
+    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
+
+  // Unroll the loop for m[i] calculation
+  #pragma hls_unroll yes
+  for (; i < 64; ++i)
+    m[i] = ((((((m[i - 2] >> 17) | (m[i - 2] << (32 - 17))) ^ ((m[i - 2] >> 19) | (m[i - 2] << (32 - 19)))) ^ (m[i - 2] >> 10)) + m[i - 7]) + ((((m[i - 15] >> 7) | (m[i - 15] << (32 - 7))) ^ ((m[i - 15] >> 18) | (m[i - 15] << (32 - 18)))) ^ (m[i - 15] >> 3))) + m[i - 16];
+
+  a = state[0];
+  b = state[1];
+  c = state[2];
+  d = state[3];
+  e = state[4];
+  f = state[5];
+  g = state[6];
+  h = state[7];
+
+  // Unroll the main loop
+  #pragma hls_unroll yes
+  for (i = 0; i < 64; ++i)
+  {
+    t1 = (((h + ((((e >> 6) | (e << (32 - 6))) ^ ((e >> 11) | (e << (32 - 11)))) ^ ((e >> 25) | (e << (32 - 25))))) + ((e & f) ^ ((~e) & g))) + k[i]) + m[i];
+    t2 = ((((a >> 2) | (a << (32 - 2))) ^ ((a >> 13) | (a << (32 - 13)))) ^ ((a >> 22) | (a << (32 - 22)))) + (((a & b) ^ (a & c)) ^ (b & c));
+    h = g;
+    g = f;
+    f = e;
+    e = d + t1;
+    d = c;
+    c = b;
+    b = a;
+    a = t1 + t2;
+  }
+
+  state[0] += a;
+  state[1] += b;
+  state[2] += c;
+  state[3] += d;
+  state[4] += e;
+  state[5] += f;
+  state[6] += g;
+  state[7] += h;
+}
+
+int main()
+{
+  state_t state = {1684234849, 1701077858, 1717920867, 1734763876, 1751606885, 1768449894, 1785292903, 1802135912};
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 128, 0, 0, 0, 0, 0, 0, 0};
+  sha256_transform(state, data);
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+}
+```
+
+In this optimized version, the loops are fully unrolled to minimize latency. This approach increases the area usage but achieves the goal of reducing latency.
+Compiling the code
+The code is correct
+b'883604356 1722112173 1361309521 -1644760932 431716477 -990806266 1022515149 1275567721 \n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 128 0 0 0 0 0 0 0 \n'
+b'883604356 1722112173 1361309521 -1644760932 431716477 -990806266 1022515149 1275567721 \n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 128 0 0 0 0 0 0 0 \n'
+The code is functionally correct, number of iterations: 1
+Running catapult
+The code is correct
+Building unit test for  sha256_update
+{'data_int': (1, 64), 'datalen_int': (0, 0), 'state': (1, 8), 'bitlen_int': (0, 0), 'data': (1, 64), 'len': (0, 0)}
+model:  adaptive
+Running catapult
+Error:   $PROJECT_HOME/tmp/sha256_update_initial.c(97): Unsupported synthesis feature 'pointers-to-arrays on the interface' (CIN-70)
+
+iteration  0
+Model:  gpt-4o-mini
+Prompt:  Help me rewrite the sha256_update function to be compatible with HLS: 
+```
+void sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t *data, size_t len)
+{
+  int i;
+  for (i = 0; i < len; ++i)
+  {
+    (*data_int)[*datalen_int] = (*data)[i];
+    (*datalen_int)++;
+    if ((*datalen_int) == 64)
+    {
+      sha256_transform(state, data_int);
+      *bitlen_int += 512;
+      *datalen_int = 0;
+    }
+  }
+
+}
+
+```
+ 
+        The following child functions and includes will be provided with the following signature, assume them present in the code:
+        
+```#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+#define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+#define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+
+#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+#define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+typedef  unsigned char data_t[64];
+typedef  unsigned int state_t[8];
+typedef struct {
+	data_t data;
+	unsigned int datalen;
+	unsigned long long bitlen;
+	state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+void sha256_transform(state_t state, data_t data);
+
+```
+
+        The current problem is:" 
+ $PROJECT_HOME/tmp/sha256_update_initial.c(97): Unsupported synthesis feature 'pointers-to-arrays on the interface' (CIN-70)
+
+You can get rid of pointers in the interface using the array notation like
+
+void foo(int a[SIZE]);
+
+you will need to substitute SIZE with the size of the array. 
+
+In the usage of the parameter a you can use the array notation as well, like a[i] instead of *a[i].
+
+
+        
+
+ also include a main function that tests the code in the same way of the reference code: 
+```int main()
+{
+  data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+  unsigned int datalen_int = 0x0;
+  state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+  unsigned long long int bitlen_int = 0x0;
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+  size_t len = 0x38;
+  sha256_update(&data_int, &datalen_int, &state, &bitlen_int, &data, len);
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data_int[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", datalen_int);
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", bitlen_int);
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", len);
+}
+
+
+
+```
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK74g4bZAe6FoFe6JwR3wwvRRkTKL', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='Here is the modified `sha256_update` function that is compatible with HLS, along with the `main` function for testing. The changes involve replacing pointer usage with array notation, as specified.\n\n```c\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", len);\n}\n```\n\n### Key Changes:\n1. The `data_int` parameter in `sha256_update` is now an array instead of a pointer to an array.\n2. The `state` parameter is also passed as an array instead of a pointer to an array.\n3. The usage of `(*data_int)[*datalen_int]` is replaced with `data_int[*datalen_int]`, and similarly for the `data` parameter.\n\nThis code should now be compatible with HLS tools, allowing for proper synthesis without pointer-related issues.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729357118, model='gpt-4o-mini-2024-07-18', object='chat.completion', system_fingerprint='fp_482c22a7bc', usage=CompletionUsage(completion_tokens=935, prompt_tokens=1947, total_tokens=2882, prompt_tokens_details={'cached_tokens': 0}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+Here is the modified `sha256_update` function that is compatible with HLS, along with the `main` function for testing. The changes involve replacing pointer usage with array notation, as specified.
+
+```c
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", len);
+}
+```
+
+### Key Changes:
+1. The `data_int` parameter in `sha256_update` is now an array instead of a pointer to an array.
+2. The `state` parameter is also passed as an array instead of a pointer to an array.
+3. The usage of `(*data_int)[*datalen_int]` is replaced with `data_int[*datalen_int]`, and similarly for the `data` parameter.
+
+This code should now be compatible with HLS tools, allowing for proper synthesis without pointer-related issues.
+Compiling the code
+The code is correct
+b'97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 29 0 0 0 0 0 0 0 \n56\n1779033703 -1150833019 1013904242 -1521486534 1359893119 -1694144372 528734635 1541459225 \n0\n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 0 0 0 0 0 0 0 0 \n56\n'
+b'97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 29 0 0 0 0 0 0 0 \n56\n1779033703 -1150833019 1013904242 -1521486534 1359893119 -1694144372 528734635 1541459225 \n0\n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 0 0 0 0 0 0 0 0 \n56\n'
+The code is functionally correct, number of iterations: 1
+Running catapult
+The code is correct
+Prompt:  Update the sha256_update function to optimize it for HLS targetting latency.
+        The function is 
+```
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+
+```
+
+        The following child functions and includes will be provided to with the following signature, assume them present in the code:
+        
+```#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+#define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+#define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+
+#define CH(x,y,z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x,y,z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+#define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+#define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+typedef  unsigned char data_t[64];
+typedef  unsigned int state_t[8];
+typedef struct {
+	data_t data;
+	unsigned int datalen;
+	unsigned long long bitlen;
+	state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+void sha256_transform(state_t state, data_t data);
+
+```
+
+        You should include a main function that tests the code in the same way of the reference code: 
+```
+int main()
+{
+  data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+  unsigned int datalen_int = 0x0;
+  state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+  unsigned long long int bitlen_int = 0x0;
+  data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+  size_t len = 0x38;
+  sha256_update(&data_int, &datalen_int, &state, &bitlen_int, &data, len);
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data_int[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", datalen_int);
+  for (int _i = 0; _i < 8; _i++)
+  {
+    printf("%d ", state[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", bitlen_int);
+  for (int _i = 0; _i < 64; _i++)
+  {
+    printf("%d ", data[_i]);
+  }
+
+  printf("\n");
+  printf("%d\n", len);
+}
+
+
+
+```
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7aQQYHgPUtqNEmgIZctK7a36JsP', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content="To optimize the `sha256_update` function for latency, we can apply loop unrolling to the loop inside the function. This will help reduce the number of iterations and thus decrease the latency. Here's the updated function with the appropriate pragma for loop unrolling:\n\n```c\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n```\n\nThe `#pragma HLS unroll yes` directive fully unrolls the loop, which can significantly reduce the latency by executing multiple iterations in parallel. This is particularly useful when the loop body is small and the loop count is known at compile time, as in this case. \n\nThe rest of the code, including the main function, remains unchanged. The main function provided will test the `sha256_update` function as expected.", role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359086, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=281, prompt_tokens=1954, total_tokens=2235, prompt_tokens_details={'cached_tokens': 0}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+To optimize the `sha256_update` function for latency, we can apply loop unrolling to the loop inside the function. This will help reduce the number of iterations and thus decrease the latency. Here's the updated function with the appropriate pragma for loop unrolling:
+
+```c
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+```
+
+The `#pragma HLS unroll yes` directive fully unrolls the loop, which can significantly reduce the latency by executing multiple iterations in parallel. This is particularly useful when the loop body is small and the loop count is known at compile time, as in this case. 
+
+The rest of the code, including the main function, remains unchanged. The main function provided will test the `sha256_update` function as expected.
+Compiling the code
+Error:  /usr/lib/gcc/x86_64-redhat-linux/8/../../../../lib64/crt1.o: In function `_start':
+(.text+0x24): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+
+There is an error in the code:  /usr/lib/gcc/x86_64-redhat-linux/8/../../../../lib64/crt1.o: In function `_start':
+(.text+0x24): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+Prompt:  There is an error in the code: 
+/usr/lib/gcc/x86_64-redhat-linux/8/../../../../lib64/crt1.o: In function `_start':
+(.text+0x24): undefined reference to `main'
+collect2: error: ld returned 1 exit status, try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7aUmSFQ02hlMO9ekX4dfbF8eYTb', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The error message indicates that the linker is unable to find the `main` function. This typically happens when the `main` function is not defined or not linked correctly. Let\'s ensure that the `main` function is included in the code. Here\'s the complete code with the `main` function included:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t *state, data_t data[]);\n\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis code includes the `main` function, which tests the `sha256_update` function. Make sure to compile and link this code correctly to avoid any linker errors.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359090, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1877, prompt_tokens=2308, total_tokens=4185, prompt_tokens_details={'cached_tokens': 2048}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The error message indicates that the linker is unable to find the `main` function. This typically happens when the `main` function is not defined or not linked correctly. Let's ensure that the `main` function is included in the code. Here's the complete code with the `main` function included:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This code includes the `main` function, which tests the `sha256_update` function. Make sure to compile and link this code correctly to avoid any linker errors.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:7: note: this is the location of the previous definition
+ #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:111: warning: "ROTRIGHT" redefined
+ #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:8: note: this is the location of the previous definition
+ #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:115: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:116: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:117: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:118: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:121:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:139:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7ayIz505MnjDoGnrtc7uQSuTnO8', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is included multiple times or if there are conflicting definitions. To resolve this, we can use include guards to ensure that the macros and other definitions are only included once. Here\'s the updated code with include guards:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#ifndef SHA256_H\n#define SHA256_H\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t *state, data_t data[]);\n\nvoid sha256_transform(state_t state, data_t data);\n\n#endif // SHA256_H\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis code uses include guards (`#ifndef`, `#define`, `#endif`) to prevent multiple inclusions of the same header content, which should resolve the redefinition warning. Make sure to compile this code as a single file or ensure that the header content is not included multiple times in your project.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359120, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1927, prompt_tokens=4253, total_tokens=6180, prompt_tokens_details={'cached_tokens': 3968}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is included multiple times or if there are conflicting definitions. To resolve this, we can use include guards to ensure that the macros and other definitions are only included once. Here's the updated code with include guards:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#ifndef SHA256_H
+#define SHA256_H
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t data[], size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t *state, data_t data[]);
+
+void sha256_transform(state_t state, data_t data);
+
+#endif // SHA256_H
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This code uses include guards (`#ifndef`, `#define`, `#endif`) to prevent multiple inclusions of the same header content, which should resolve the redefinition warning. Make sure to compile this code as a single file or ensure that the header content is not included multiple times in your project.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:113: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:7: note: this is the location of the previous definition
+ #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:114: warning: "ROTRIGHT" redefined
+ #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:8: note: this is the location of the previous definition
+ #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:118: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:119: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:120: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:121: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:124:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:142:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:113: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:113: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7bSXf5ZXrxjsn1leF0RKau8kpjU', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times within the same file. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let\'s ensure that the macros are defined only once and that the function declarations are correctly placed. Here\'s the corrected code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359150, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1897, prompt_tokens=6248, total_tokens=8145, prompt_tokens_details={'cached_tokens': 6016}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times within the same file. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let's ensure that the macros are defined only once and that the function declarations are correctly placed. Here's the corrected code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:7: note: this is the location of the previous definition
+ #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:111: warning: "ROTRIGHT" redefined
+ #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:8: note: this is the location of the previous definition
+ #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:115: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:116: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:117: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:118: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:121:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:139:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7c21hT8O7LzknToPOI1309Z3nqE', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let\'s ensure that the macros are defined only once and that the function declarations are correctly placed. Here\'s the corrected code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359186, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1893, prompt_tokens=8213, total_tokens=10106, prompt_tokens_details={'cached_tokens': 7936}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let's ensure that the macros are defined only once and that the function declarations are correctly placed. Here's the corrected code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:7: note: this is the location of the previous definition
+ #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:111: warning: "ROTRIGHT" redefined
+ #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:8: note: this is the location of the previous definition
+ #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:115: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:116: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:117: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:118: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:121:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:139:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7ca9k62xk1SVeiWmFQOj8zYZwmc', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let\'s ensure that the macros are defined only once and that the function declarations are correctly placed. Here\'s the corrected code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359220, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1893, prompt_tokens=10174, total_tokens=12067, prompt_tokens_details={'cached_tokens': 9984}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The warning about "ROTLEFT" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. Since the code provided is a single file, the issue might be due to a misunderstanding in the structure. Let's ensure that the macros are defined only once and that the function declarations are correctly placed. Here's the corrected code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This code ensures that the macros are defined only once and that the function declarations are correctly placed. If you are still encountering issues, please ensure that the file is not being included multiple times in your build process.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:7: note: this is the location of the previous definition
+ #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:111: warning: "ROTRIGHT" redefined
+ #define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+ 
+tmp/sha256_update_llm_opt.c:8: note: this is the location of the previous definition
+ #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+ 
+tmp/sha256_update_llm_opt.c:115: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:116: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:117: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:118: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:121:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:139:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:110: warning: "ROTLEFT" redefined
+ #define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7d62jOwztQmOmBqHP85NopxSCri', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='I apologize for the oversight. The warning about "ROTLEFT" being redefined indicates that the macro is being defined more than once. This can happen if the code is structured in a way that includes the same definitions multiple times. To prevent this, we can use include guards or ensure that the macros are defined only once. However, since this is a single file, let\'s ensure that the macros are not accidentally redefined. Here\'s the corrected code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#ifndef ROTLEFT\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#endif\n\n#ifndef ROTRIGHT\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n#endif\n\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nBy using `#ifndef` and `#define` around the macro definitions, we ensure that they are only defined once, preventing redefinition warnings. This should resolve the issue.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359252, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1905, prompt_tokens=12135, total_tokens=14040, prompt_tokens_details={'cached_tokens': 11904}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+I apologize for the oversight. The warning about "ROTLEFT" being redefined indicates that the macro is being defined more than once. This can happen if the code is structured in a way that includes the same definitions multiple times. To prevent this, we can use include guards or ensure that the macros are defined only once. However, since this is a single file, let's ensure that the macros are not accidentally redefined. Here's the corrected code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#ifndef ROTLEFT
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#endif
+
+#ifndef ROTRIGHT
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+#endif
+
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+By using `#ifndef` and `#define` around the macro definitions, we ensure that they are only defined once, preventing redefinition warnings. This should resolve the issue.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:120: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+tmp/sha256_update_llm_opt.c:12: note: this is the location of the previous definition
+ #define EP0(x) (ROTRIGHT(x,2) ^ ROTRIGHT(x,13) ^ ROTRIGHT(x,22))
+ 
+tmp/sha256_update_llm_opt.c:121: warning: "EP1" redefined
+ #define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+ 
+tmp/sha256_update_llm_opt.c:13: note: this is the location of the previous definition
+ #define EP1(x) (ROTRIGHT(x,6) ^ ROTRIGHT(x,11) ^ ROTRIGHT(x,25))
+ 
+tmp/sha256_update_llm_opt.c:122: warning: "SIG0" redefined
+ #define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:14: note: this is the location of the previous definition
+ #define SIG0(x) (ROTRIGHT(x,7) ^ ROTRIGHT(x,18) ^ ((x) >> 3))
+ 
+tmp/sha256_update_llm_opt.c:123: warning: "SIG1" redefined
+ #define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:15: note: this is the location of the previous definition
+ #define SIG1(x) (ROTRIGHT(x,17) ^ ROTRIGHT(x,19) ^ ((x) >> 10))
+ 
+tmp/sha256_update_llm_opt.c:126:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:144:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:120: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ 
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:120: warning: "EP0" redefined
+ #define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+ , try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7dfeYARRRGvS9CFV3KYvimUvDwi', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The warning about "EP0" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. To prevent this, we can use include guards or ensure that the macros are defined only once. However, since this is a single file, let\'s ensure that the macros are not accidentally redefined. Here\'s the corrected code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#ifndef ROTLEFT\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#endif\n\n#ifndef ROTRIGHT\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n#endif\n\n#ifndef CH\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#endif\n\n#ifndef MAJ\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#endif\n\n#ifndef EP0\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#endif\n\n#ifndef EP1\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#endif\n\n#ifndef SIG0\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#endif\n\n#ifndef SIG1\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n#endif\n\n/**************************** VARIABLES *****************************/\nstatic const unsigned int k[64] = {\n    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,\n    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,\n    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,\n    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,\n    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,\n    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,\n    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,\n    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2\n};\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nBy using `#ifndef` and `#define` around each macro definition, we ensure that they are only defined once, preventing redefinition warnings. This should resolve the issue.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359287, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1934, prompt_tokens=14113, total_tokens=16047, prompt_tokens_details={'cached_tokens': 13824}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The warning about "EP0" being redefined suggests that the macro is being defined multiple times. This can happen if the code is structured in a way that includes the same definitions more than once. To prevent this, we can use include guards or ensure that the macros are defined only once. However, since this is a single file, let's ensure that the macros are not accidentally redefined. Here's the corrected code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#ifndef ROTLEFT
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#endif
+
+#ifndef ROTRIGHT
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+#endif
+
+#ifndef CH
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#endif
+
+#ifndef MAJ
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#endif
+
+#ifndef EP0
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#endif
+
+#ifndef EP1
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#endif
+
+#ifndef SIG0
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#endif
+
+#ifndef SIG1
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+#endif
+
+/**************************** VARIABLES *****************************/
+static const unsigned int k[64] = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+By using `#ifndef` and `#define` around each macro definition, we ensure that they are only defined once, preventing redefinition warnings. This should resolve the issue.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:143:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+tmp/sha256_update_llm_opt.c:18:27: note: ‘const unsigned int k [64]’ previously defined here
+ static const unsigned int k[64] = {
+                           ^
+tmp/sha256_update_llm_opt.c:161:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:143:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:143:31: error: redefinition of ‘const unsigned int k [64]’
+ static const unsigned int k[64] = {
+                               ^, try again
+
+To solve this problem you can get rid of the function in the error as I have already defined it in my code.
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7eDAUHQYKgxX6WRzQRlQAGwjQD2', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='Understood. If the constant array `k` is already defined elsewhere in your code, we can remove its definition from this snippet. Here\'s the updated code without redefining `k`:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#ifndef ROTLEFT\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#endif\n\n#ifndef ROTRIGHT\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n#endif\n\n#ifndef CH\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#endif\n\n#ifndef MAJ\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#endif\n\n#ifndef EP0\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#endif\n\n#ifndef EP1\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#endif\n\n#ifndef SIG0\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#endif\n\n#ifndef SIG1\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n#endif\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\ntypedef struct {\n    data_t data;\n    unsigned int datalen;\n    unsigned long long bitlen;\n    state_t state;\n} SHA256_CTX;\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nThis version of the code removes the redefinition of the `k` array, assuming it is defined elsewhere in your project. This should resolve the redefinition error.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359321, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1313, prompt_tokens=16132, total_tokens=17445, prompt_tokens_details={'cached_tokens': 15872}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+Understood. If the constant array `k` is already defined elsewhere in your code, we can remove its definition from this snippet. Here's the updated code without redefining `k`:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#ifndef ROTLEFT
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#endif
+
+#ifndef ROTRIGHT
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+#endif
+
+#ifndef CH
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#endif
+
+#ifndef MAJ
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#endif
+
+#ifndef EP0
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#endif
+
+#ifndef EP1
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#endif
+
+#ifndef SIG0
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#endif
+
+#ifndef SIG1
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+#endif
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+typedef struct {
+    data_t data;
+    unsigned int datalen;
+    unsigned long long bitlen;
+    state_t state;
+} SHA256_CTX;
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+This version of the code removes the redefinition of the `k` array, assuming it is defined elsewhere in your project. This should resolve the redefinition error.
+Compiling the code
+Error:  tmp/sha256_update_llm_opt.c:149:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+tmp/sha256_update_llm_opt.c:36:3: note: previous declaration as ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+
+There is an error in the code:  tmp/sha256_update_llm_opt.c:149:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~
+Prompt:  There is an error in the code: 
+tmp/sha256_update_llm_opt.c:149:3: error: conflicting declaration ‘typedef struct SHA256_CTX SHA256_CTX’
+ } SHA256_CTX;
+   ^~~~~~~~~~, try again
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-AK7eYsPYpvphi5x9OBe2VeVGpHqVH', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='The error message indicates a conflicting declaration for the `SHA256_CTX` type. This typically happens when the type is already defined elsewhere in your code. To resolve this, you can remove the conflicting typedef from this snippet. Here\'s the updated code:\n\n```c\n#include <stdlib.h>\n#include <stdio.h>\n#include <memory.h>\n\n#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest\n\n/****************************** MACROS ******************************/\n#ifndef ROTLEFT\n#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))\n#endif\n\n#ifndef ROTRIGHT\n#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))\n#endif\n\n#ifndef CH\n#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))\n#endif\n\n#ifndef MAJ\n#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))\n#endif\n\n#ifndef EP0\n#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))\n#endif\n\n#ifndef EP1\n#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))\n#endif\n\n#ifndef SIG0\n#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))\n#endif\n\n#ifndef SIG1\n#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))\n#endif\n\ntypedef unsigned char data_t[64];\ntypedef unsigned int state_t[8];\n\n/*********************** FUNCTION DECLARATIONS **********************/\nvoid sha256_init(SHA256_CTX *ctx);\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);\nvoid sha256_final(SHA256_CTX *ctx, unsigned char hash[]);\nvoid sha256_transform(state_t state, data_t data);\n\nvoid sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)\n{\n    int i;\n    #pragma HLS unroll yes\n    for (i = 0; i < len; ++i)\n    {\n        data_int[*datalen_int] = data[i];\n        (*datalen_int)++;\n        if ((*datalen_int) == 64)\n        {\n            sha256_transform(state, data_int);\n            *bitlen_int += 512;\n            *datalen_int = 0;\n        }\n    }\n}\n\nint main()\n{\n    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};\n    unsigned int datalen_int = 0x0;\n    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};\n    unsigned long long int bitlen_int = 0x0;\n    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};\n    size_t len = 0x38;\n    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data_int[_i]);\n    }\n\n    printf("\\n");\n    printf("%d\\n", datalen_int);\n    for (int _i = 0; _i < 8; _i++)\n    {\n        printf("%d ", state[_i]);\n    }\n\n    printf("\\n");\n    printf("%llu\\n", bitlen_int);\n    for (int _i = 0; _i < 64; _i++)\n    {\n        printf("%d ", data[_i]);\n    }\n\n    printf("\\n");\n    printf("%zu\\n", len);\n\n    return 0;\n}\n```\n\nIn this version, I\'ve removed the `SHA256_CTX` struct definition, assuming it is defined elsewhere in your project. This should resolve the conflicting declaration error.', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1729359342, model='gpt-4o-2024-08-06', object='chat.completion', system_fingerprint='fp_45c6de4934', usage=CompletionUsage(completion_tokens=1293, prompt_tokens=17502, total_tokens=18795, prompt_tokens_details={'cached_tokens': 17280}, completion_tokens_details={'reasoning_tokens': 0}))
+LLM RESPONSE:
+The error message indicates a conflicting declaration for the `SHA256_CTX` type. This typically happens when the type is already defined elsewhere in your code. To resolve this, you can remove the conflicting typedef from this snippet. Here's the updated code:
+
+```c
+#include <stdlib.h>
+#include <stdio.h>
+#include <memory.h>
+
+#define SHA256_BLOCK_SIZE 32 // SHA256 outputs a 32 byte digest
+
+/****************************** MACROS ******************************/
+#ifndef ROTLEFT
+#define ROTLEFT(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+#endif
+
+#ifndef ROTRIGHT
+#define ROTRIGHT(a, b) (((a) >> (b)) | ((a) << (32 - (b))))
+#endif
+
+#ifndef CH
+#define CH(x, y, z) (((x) & (y)) ^ (~(x) & (z)))
+#endif
+
+#ifndef MAJ
+#define MAJ(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
+#endif
+
+#ifndef EP0
+#define EP0(x) (ROTRIGHT(x, 2) ^ ROTRIGHT(x, 13) ^ ROTRIGHT(x, 22))
+#endif
+
+#ifndef EP1
+#define EP1(x) (ROTRIGHT(x, 6) ^ ROTRIGHT(x, 11) ^ ROTRIGHT(x, 25))
+#endif
+
+#ifndef SIG0
+#define SIG0(x) (ROTRIGHT(x, 7) ^ ROTRIGHT(x, 18) ^ ((x) >> 3))
+#endif
+
+#ifndef SIG1
+#define SIG1(x) (ROTRIGHT(x, 17) ^ ROTRIGHT(x, 19) ^ ((x) >> 10))
+#endif
+
+typedef unsigned char data_t[64];
+typedef unsigned int state_t[8];
+
+/*********************** FUNCTION DECLARATIONS **********************/
+void sha256_init(SHA256_CTX *ctx);
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len);
+void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
+void sha256_transform(state_t state, data_t data);
+
+void sha256_update(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
+{
+    int i;
+    #pragma HLS unroll yes
+    for (i = 0; i < len; ++i)
+    {
+        data_int[*datalen_int] = data[i];
+        (*datalen_int)++;
+        if ((*datalen_int) == 64)
+        {
+            sha256_transform(state, data_int);
+            *bitlen_int += 512;
+            *datalen_int = 0;
+        }
+    }
+}
+
+int main()
+{
+    data_t data_int = {160, 50, 96, 0, 0, 0, 0, 0, 160, 50, 96, 0, 0, 0, 0, 0, 143, 113, 142, 247, 255, 127, 0, 0, 139, 128, 59, 247, 255, 127, 0, 0, 224, 137, 59, 247, 255, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 232, 1, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 0, 0, 0, 0};
+    unsigned int datalen_int = 0x0;
+    state_t state = {1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225};
+    unsigned long long int bitlen_int = 0x0;
+    data_t data = {97, 98, 99, 100, 98, 99, 100, 101, 99, 100, 101, 102, 100, 101, 102, 103, 101, 102, 103, 104, 102, 103, 104, 105, 103, 104, 105, 106, 104, 105, 106, 107, 105, 106, 107, 108, 106, 107, 108, 109, 107, 108, 109, 110, 108, 109, 110, 111, 109, 110, 111, 112, 110, 111, 112, 113, 0, 0, 0, 0, 0, 0, 0, 0};
+    size_t len = 0x38;
+    sha256_update(data_int, &datalen_int, state, &bitlen_int, data, len);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data_int[_i]);
+    }
+
+    printf("\n");
+    printf("%d\n", datalen_int);
+    for (int _i = 0; _i < 8; _i++)
+    {
+        printf("%d ", state[_i]);
+    }
+
+    printf("\n");
+    printf("%llu\n", bitlen_int);
+    for (int _i = 0; _i < 64; _i++)
+    {
+        printf("%d ", data[_i]);
+    }
+
+    printf("\n");
+    printf("%zu\n", len);
+
+    return 0;
+}
+```
+
+In this version, I've removed the `SHA256_CTX` struct definition, assuming it is defined elsewhere in your project. This should resolve the conflicting declaration error.
+Compiling the code
+The code is correct
+b'97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 29 0 0 0 0 0 0 0 \n56\n1779033703 -1150833019 1013904242 -1521486534 1359893119 -1694144372 528734635 1541459225 \n0\n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 0 0 0 0 0 0 0 0 \n56\n'
+b'97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 29 0 0 0 0 0 0 0 \n56\n1779033703 -1150833019 1013904242 -1521486534 1359893119 -1694144372 528734635 1541459225 \n0\n97 98 99 100 98 99 100 101 99 100 101 102 100 101 102 103 101 102 103 104 102 103 104 105 103 104 105 106 104 105 106 107 105 106 107 108 106 107 108 109 107 108 109 110 108 109 110 111 109 110 111 112 110 111 112 113 0 0 0 0 0 0 0 0 \n56\n'
+The code is functionally correct, number of iterations: 10
+Running catapult
+The code is correct
+DONE!

@@ -1,5 +1,6 @@
-void
-Runs(int *res_S, int *res_V)
+
+
+void Runs(int *res_S, int *res_V)
 {
 	int		S, V, k;
 

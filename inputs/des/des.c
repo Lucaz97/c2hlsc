@@ -16,23 +16,23 @@
 // Initial (Inv)Permutation step
 void IP(des_state_t * state, des_block_t *in)
 {
-	(*state)[0] = BITNUM(*in,57,31) | BITNUM(*in,49,30) | BITNUM(*in,41,29) | BITNUM(*in,33,28) |
-				  BITNUM(*in,25,27) | BITNUM(*in,17,26) | BITNUM(*in,9,25) | BITNUM(*in,1,24) |
-				  BITNUM(*in,59,23) | BITNUM(*in,51,22) | BITNUM(*in,43,21) | BITNUM(*in,35,20) |
-				  BITNUM(*in,27,19) | BITNUM(*in,19,18) | BITNUM(*in,11,17) | BITNUM(*in,3,16) |
-				  BITNUM(*in,61,15) | BITNUM(*in,53,14) | BITNUM(*in,45,13) | BITNUM(*in,37,12) |
-				  BITNUM(*in,29,11) | BITNUM(*in,21,10) | BITNUM(*in,13,9) | BITNUM(*in,5,8) |
-				  BITNUM(*in,63,7) | BITNUM(*in,55,6) | BITNUM(*in,47,5) | BITNUM(*in,39,4) |
-				  BITNUM(*in,31,3) | BITNUM(*in,23,2) | BITNUM(*in,15,1) | BITNUM(*in,7,0);
+	(*state)[0] = BITNUM((*in),57,31) | BITNUM((*in),49,30) | BITNUM((*in),41,29) | BITNUM((*in),33,28) |
+				  BITNUM((*in),25,27) | BITNUM((*in),17,26) | BITNUM((*in),9,25) | BITNUM((*in),1,24) |
+				  BITNUM((*in),59,23) | BITNUM((*in),51,22) | BITNUM((*in),43,21) | BITNUM((*in),35,20) |
+				  BITNUM((*in),27,19) | BITNUM((*in),19,18) | BITNUM((*in),11,17) | BITNUM((*in),3,16) |
+				  BITNUM((*in),61,15) | BITNUM((*in),53,14) | BITNUM((*in),45,13) | BITNUM((*in),37,12) |
+				  BITNUM((*in),29,11) | BITNUM((*in),21,10) | BITNUM((*in),13,9) | BITNUM((*in),5,8) |
+				  BITNUM((*in),63,7) | BITNUM((*in),55,6) | BITNUM((*in),47,5) | BITNUM((*in),39,4) |
+				  BITNUM((*in),31,3) | BITNUM((*in),23,2) | BITNUM((*in),15,1) | BITNUM((*in),7,0);
 
-	(*state)[1] = BITNUM(*in,56,31) | BITNUM(*in,48,30) | BITNUM(*in,40,29) | BITNUM(*in,32,28) |
-				  BITNUM(*in,24,27) | BITNUM(*in,16,26) | BITNUM(*in,8,25) | BITNUM(*in,0,24) |
-				  BITNUM(*in,58,23) | BITNUM(*in,50,22) | BITNUM(*in,42,21) | BITNUM(*in,34,20) |
-				  BITNUM(*in,26,19) | BITNUM(*in,18,18) | BITNUM(*in,10,17) | BITNUM(*in,2,16) |
-				  BITNUM(*in,60,15) | BITNUM(*in,52,14) | BITNUM(*in,44,13) | BITNUM(*in,36,12) |
-				  BITNUM(*in,28,11) | BITNUM(*in,20,10) | BITNUM(*in,12,9) | BITNUM(*in,4,8) |
-				  BITNUM(*in,62,7) | BITNUM(*in,54,6) | BITNUM(*in,46,5) | BITNUM(*in,38,4) |
-				  BITNUM(*in,30,3) | BITNUM(*in,22,2) | BITNUM(*in,14,1) | BITNUM(*in,6,0);
+	(*state)[1] = BITNUM((*in),56,31) | BITNUM((*in),48,30) | BITNUM((*in),40,29) | BITNUM((*in),32,28) |
+				  BITNUM((*in),24,27) | BITNUM((*in),16,26) | BITNUM((*in),8,25) | BITNUM((*in),0,24) |
+				  BITNUM((*in),58,23) | BITNUM((*in),50,22) | BITNUM((*in),42,21) | BITNUM((*in),34,20) |
+				  BITNUM((*in),26,19) | BITNUM((*in),18,18) | BITNUM((*in),10,17) | BITNUM((*in),2,16) |
+				  BITNUM((*in),60,15) | BITNUM((*in),52,14) | BITNUM((*in),44,13) | BITNUM((*in),36,12) |
+				  BITNUM((*in),28,11) | BITNUM((*in),20,10) | BITNUM((*in),12,9) | BITNUM((*in),4,8) |
+				  BITNUM((*in),62,7) | BITNUM((*in),54,6) | BITNUM((*in),46,5) | BITNUM((*in),38,4) |
+				  BITNUM((*in),30,3) | BITNUM((*in),22,2) | BITNUM((*in),14,1) | BITNUM((*in),6,0);
 }
 
 void InvIP(des_state_t * state, des_block_t *in)

@@ -66,14 +66,22 @@ def call_llm(model, message_list):
         system_content = message_list[0]["content"]
         mlist = message_list[1:]
         print(mlist)
-        message = client.messages.create(
-            model=model,
-            messages=mlist,
-            system=system_content,
-            temperature=0.2,
-            top_p=0.2,
-            max_tokens=4096
-        )
+        try:
+            message = client.messages.create(
+                model=model,
+                messages=mlist,
+                system=system_content,
+                temperature=0.2,
+                top_p=0.2,
+                max_tokens=4096
+            )
+        except anthropic.APIError as e:
+            # if overloaded error, retry
+            if "overloaded" in str(e):
+                return call_llm(model, message_list)
+            else: 
+                print(e)
+                exit(1)
         print("LLM RAW RESPONSE: ", message)
         message_list.append({"role": "assistant", "content": message.content[0].text})
         llm_input_tokens[model] += message.usage.input_tokens
@@ -239,7 +247,17 @@ class FuncCallVisitor(c_ast.NodeVisitor):
         #print(self.name, " calls", node.name.name)
         calls_table[self.name].append(node.name.name)
 
-
+class OperatorVisitor(c_ast.NodeVisitor):
+    def __init__(self):
+        self.operators_count =0
+    
+    def visit_BinaryOp(self, node):
+        self.operators_count += 1
+        self.generic_visit(node)
+    
+    def visit_UnaryOp(self, node):
+        self.operators_count += 1
+        self.generic_visit(node)
 
 
 def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, processed, model="adaptive", mode="standard", opt_target="area"):
@@ -303,7 +321,7 @@ def C2HLSC (includes, orig_code, test_code, tcl, top_function, out_folder, proce
         signatures = getSignatures(top_function)
 
         std_prompt = f"""Help me rewrite the {top_function} function to be compatible with HLS: \n```\n{code_to_fix}```\n 
-        The following child functions and includes will be provided to with the following signature, assume them present in the code:
+        The following child functions and includes will be provided with the following signature, assume them present in the code:
         \n```{includes}\n{signatures}\n```\n
         The current problem is:" \n{error}
         \n\n also include a main function that tests the code in the same way of the reference code: \n```{test_code}\n```"""
@@ -516,7 +534,7 @@ def HLSC_optimizer (includes, orig_code, code_to_fix, test_code, tcl, top_functi
         You should include a main function that tests the code in the same way of the reference code: \n```\n{test_code}\n```"""
     
     message_list=[
-            {"role": "system", "content": system_content_c2hlsc},
+            {"role": "system", "content": system_content_optimizer},
             {"role": "user", "content": initial_prompt}
         ]
     error = 1
@@ -680,6 +698,7 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default="claude-3-5-sonnet-20240620", choices=models, help='model name to use, default is gpt-3.5-turbo-0125')
     opt_target = ["area", "latency"]
     parser.add_argument('--opt_target', type=str, default="area", choices=opt_target, help='optimization target, default is area')
+    parser.add_argument('--characterize', type=bool, default=False,  help='run benchmark characterization')
     args = parser.parse_args()
     model = args.model
     if model != "adaptive":
@@ -702,6 +721,7 @@ if __name__ == "__main__":
         client = OpenAI()
 
     target = args.opt_target
+    characterize = args.characterize
     print("Model: ", model)
     print("Optimization target: ", target)
 
@@ -744,6 +764,56 @@ if __name__ == "__main__":
     os.makedirs(out_folder)
     hierarchical_calls = []
     processed = []
+    if characterize:
+        filename = "tmp/complete.c"
+        with open(filename, "w") as f:
+            f.write(includes)
+            f.write(orig_code)
+            f.write(test_code)
+
+        ast = parse_file(filename, use_cpp=True,
+                        cpp_args=r'-Iutils/fake_libc_include')
+        v = HierarchyVisitor()
+        v.visit(ast)
+        
+        print(calls_table)
+        explore_calls(top_function, hierarchical_calls) # inits hierarchical_calls
+
+        total_lines=0
+        min_lines = 99999999
+        max_lines = 0
+        tot_operators = 0
+        min_operators = 99999999
+        max_operators = 0
+
+        for func in hierarchical_calls:
+            generator = c_generator.CGenerator()
+            func_lines = generator.visit(nodes_table[func]).count("\n")
+            total_lines += func_lines
+            if func_lines < min_lines:
+                min_lines = func_lines
+            if func_lines > max_lines:
+                max_lines = func_lines
+            
+            v = OperatorVisitor()
+            v.visit(nodes_table[func])
+            tot_operators += v.operators_count
+            if v.operators_count < min_operators:
+                min_operators = v.operators_count
+            if v.operators_count > max_operators:
+                max_operators = v.operators_count
+
+        print(f"Tot functions:\t{len(hierarchical_calls)}")
+        print(f"Tot calls:\t{sum([len(calls_table[func]) for func in hierarchical_calls])}")
+        print(f"Total line count:\t {total_lines}")
+        print(f"Min lines:\t{min_lines}")
+        print(f"Max lines:\t{max_lines}")
+        print(f"Total operators:\t{tot_operators}")
+        print(f"Min operators:\t{min_operators}")
+        print(f"Max operators:\t{max_operators}")
+        
+        exit(0)
+
     if not hierarchical:
         C2HLSC(includes, orig_code, test_code, tcl, top_function, out_folder, [], model=model, mode=mode, opt_target=target)
     else:

@@ -2,10 +2,8 @@ system_content_c2hlsc = """You are a C and High Level Synthesis (HLS) expert. As
 
 system_content_optimizer = """You are a C and High Level Synthesis (HLS) expert. Assist in coding tasks aimed at optimizing synthesizable HLS code. Your response must include a C code snippet that modifies only the specified functions for optimization. Do not change functionality, and only add pragmas without modifying the function logic.
 Optimize the code for either area or latency as instructed. Possible optimization mechanisms include:
-    Loop Unrolling: Use #pragma HLS UNROLL to unroll loops. Specify factor=2 for unrolling factor of 2; otherwise, it will be fully unrolled.
-    Pipelining: Use #pragma HLS PIPELINE to increase throughput. Specify II=2 for a initiation interval of 2; otherwise, the default is 1.
-    Array Partitioning: Use #pragma HLS ARRAY_PARTITION to increase parallelism. Specify dim=1 to partition in the first dimension; otherwise, it partitions all dimensions.
-    Function Inlining: Use #pragma HLS INLINE to reduce function call overhead. Specify off to disable inlining.
+    Loop Unrolling: Use "#pragma hls_unroll X" to unroll loops with a factor of X. set X to yes to fully unroll the loop. Unrolling reduces latency at the cost of area.
+    Pipelining: Use "#pragma hls_pipeline_init_interval X" with X as the initiation interval to pipeline loops. 0 disables pipelining. Pipelining can be applied to loops to increase throughput at cost of latency.
 If no optimization is needed, simply rewrite the original function.
     """
 
@@ -142,6 +140,10 @@ ac_float:
 ac_float<W,I,E,Q>
 where the first two parameters W and I define the mantissa as an ac_fixed<W,I,true>, the E defines the
 exponent as an ac_int<E,true> and Q defines the rounding mode
+
+you do not need to include any lib I will include the following:
+#include "../include/ac_float.h"
+#include "../include/ac_fixed.h"
 """
 
 pointer_prompt = """

@@ -8,8 +8,8 @@ solution file add {c_file} -type C++
 directive set -DESIGN_GOAL area
 directive set -SPECULATE true
 directive set -MERGEABLE true
-directive set -REGISTER_THRESHOLD 256
-directive set -MEM_MAP_THRESHOLD 32
+directive set -REGISTER_THRESHOLD 512
+directive set -MEM_MAP_THRESHOLD 128
 directive set -LOGIC_OPT false
 directive set -FSM_ENCODING none
 directive set -FSM_BINARY_ENCODING_THRESHOLD 64
@@ -25,7 +25,7 @@ directive set -REALLOC true
 directive set -UNROLL no
 directive set -IO_MODE super
 directive set -CHAN_IO_PROTOCOL use_library
-directive set -ARRAY_SIZE 1024
+directive set -ARRAY_SIZE 4096
 directive set -IDLE_SIGNAL {{}}
 directive set -STALL_FLAG_SV off
 directive set -STALL_FLAG false
@@ -40,7 +40,7 @@ directive set -ON_THE_FLY_PROTOTYPING false
 directive set -OPT_CONST_MULTS use_library
 directive set -CHARACTERIZE_ROM false
 directive set -PROTOTYPE_ROM true
-directive set -ROM_THRESHOLD 64
+directive set -ROM_THRESHOLD 512
 directive set -CLUSTER_ADDTREE_IN_WIDTH_THRESHOLD 0
 directive set -CLUSTER_ADDTREE_IN_COUNT_THRESHOLD 0
 directive set -CLUSTER_OPT_CONSTANT_INPUTS true

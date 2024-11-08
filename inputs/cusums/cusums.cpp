@@ -1,5 +1,5 @@
-void
-CumulativeSums(int * res_sup, int * res_inf)
+
+void CumulativeSums(int * res_sup, int * res_inf)
 {
 	int		S, sup, inf, k;
 	S = 0;
