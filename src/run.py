@@ -20,7 +20,7 @@ calls_table = {}
 params_table = {}
 nodes_table = {}
 N = 16
-models = ["claude-3-5-sonnet-20240620","llama-3.1-70b-versatile","llama3.1-70b","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o1-mini", "llama3.1-405b", "llama3.1-8b"]
+models = ["claude-3-5-sonnet-20240620","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive"]
 llm_runs = {model: 0 for model in models}
 llm_input_tokens = {model: 0 for model in models}
 llm_output_tokens = {model: 0 for model in models}
@@ -695,10 +695,10 @@ if __name__ == "__main__":
     parser.add_argument('config', type=str, help='yaml config file with the following fields: orig_code, test_code, includes, tcl, top_function')
     # model name optional argument from a list of models
     modes = ["standard", "streaming"] # from yaml file claude-3-5-sonnet-20240620
-    parser.add_argument('--model', type=str, default="claude-3-5-sonnet-20240620", choices=models, help='model name to use, default is gpt-3.5-turbo-0125')
+    parser.add_argument('--model', type=str, default="adaptive", choices=models, help='model name to use, default is adaptive')
     opt_target = ["area", "latency"]
     parser.add_argument('--opt_target', type=str, default="area", choices=opt_target, help='optimization target, default is area')
-    parser.add_argument('--characterize', type=bool, default=False,  help='run benchmark characterization')
+    parser.add_argument('--characterize', type=bool, default=False,  help='using this option will run the benchmark characterization')
     args = parser.parse_args()
     model = args.model
     if model != "adaptive":
