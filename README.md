@@ -23,9 +23,9 @@ One yaml file contains information about top function, file paths, type of inter
 ###  Using c2hlsc:
 To run one of our benchmarks:
 
-    python3.11 src/run.py inputs/${benchmark}/config_${benchmark}.yaml --model <model name> --opt_target <area/latency>
+    python3.11 src/c2hlsc.py inputs/${benchmark}/config_${benchmark}.yaml --model <model name> --opt_target <area/latency>
 
 To get a list of the possible models and other options: 
 
-    python3.11 src/run.py -h 
+    python3.11 src/c2hlsc.py -h 
 
