@@ -18,11 +18,12 @@ if not os.path.exists("tmp"):
 #                                 GLOBAL CONSTANTS                                     #
 #======================================================================================#
 # supported models
-models = ["claude-3-5-sonnet-20240620","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive"]
+models = ["claude-3-5-sonnet-20240620","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini"]
 # float and fixed libraries includes
 libs = """
 #include "../include/ac_float.h"
 #include "../include/ac_fixed.h"
+#include <stdint.h>
 """
 # array printer template
 array_printer = """
@@ -222,8 +223,8 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         completion = cfg.client.chat.completions.create(
             model=model,
             messages = message_list,
-            top_p=0.2,
-            temperature=0.25
+            #top_p=0.2,
+            #temperature=0.25
         )
         print("LLM RAW RESPONSE: ", completion)
         message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
@@ -339,8 +340,7 @@ def build_unit_test(func, filename, cfg):
             elif "region" in line:
                 #print(line)
                 # 0x507000000090 is located 0 bytes inside of 80-byte region [0x507000000090,0x5070000000e0)
-                offset = int(line.split("located ")[1].split(" bytes")[0])
-                size = int(line.split("inside of ")[1].split("-byte")[0])
+                offset = int(line.spluint32_t("inside of ")[1].split("-byte")[0])
                 base = int(line.split("[")[1].split(",")[0], 16)
                 #print(offset, size, hex(base), idx)
                 pointers_table[keys_list[idx]].byte_offset = offset
@@ -450,7 +450,7 @@ def build_unit_test(func, filename, cfg):
     expr_list = []
     for param in cfg.params_table[func]:
         #if not isinstance(param[0], c_ast.PtrDecl) and not isinstance(param[0], c_ast.ArrayDecl):
-            expr_list.append(c_ast.ID(param[1]))
+            expr_list.append(c_ast.Cast(param[0],c_ast.ID(param[1])))
        
     # check function node for return type
     if cfg.nodes_table[func].decl.type.type.type.names[0] == "void":
@@ -562,8 +562,10 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
             print( response)
             cfg.llm_runs[model_name] += 1
             # get c copde and create a file with it
-            c_code_dut = response.split("```c")[1].split("```")[0]
-
+            if "```c" in response:
+                c_code_dut = response.split("```c")[1].split("```")[0]
+            else:
+                c_code_dut = response.split("```")[1].split("```")[0]
             # remove "#include lines"
             c_code_dut = "\n".join([line for line in c_code_dut.split("\n") if not line.startswith("#include")])
 
@@ -576,11 +578,11 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
                     with open(f"{proc}", "r") as p:
                         f.write(p.read())
                 f.write(c_code_dut)
-                # f.write(test_code_dut)
+                f.write(cfg.test_code)
 
             # compile the file with gcc 
             print("Compiling the code")
-            log = subprocess.run(["clang++", llm_file, "-o", llm_file[:-2]], capture_output=True)
+            log = subprocess.run(["clang++", "--no-warnings", llm_file, "-o", llm_file[:-2]], capture_output=True)
             cfg.compile_runs += 1
             if "error" in log.stderr.decode():
                 error = log.stderr.decode()
@@ -604,7 +606,7 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
                 f.write(cfg.test_code)
 
             # compile the reference file with gcc
-            subprocess.run(["clang", orig_file, "-o", orig_file[:-2]])
+            subprocess.run(["clang", "--no-warnings", orig_file, "-o", orig_file[:-2]])
             cfg.compile_runs += 1
 
             # run the compiled files an    models = ["gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive"]d check the outputs match
@@ -630,7 +632,7 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
         # create a file with the formatted tcl
         tcl_file = cfg.out_folder + "initial.tcl"
         with open(tcl_file, "w") as f:
-            f.write(cfg.tcl.format(top_function=cfg.top_function, c_file=llm_file))
+            f.write(cfg.tcl.format(top_function=cfg.top_function+"_hls", c_file=llm_file))
 
         print("Running catapult")
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
@@ -650,9 +652,8 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
                 elif "pointer" in error:
                     prompt += pointer_prompt
 
-                prompt += f"""Include a main function that tests the code in the same way of the reference code: \n{cfg.test_code}
-        Do not add any global variables or defines, if needed I will add them to your code. You should only modify the function you are being asked to, copy the rest of the code as is.
-"""        
+                prompt += f"""include a function named {cfg.top_function} that mainains the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. 
+                I will call this function in an automated test and provide feedback on the outcome."""       
                 message_list = [{"role": "system", "content": system_content_c2hlsc},
                 {"role": "user", "content": prompt}]
                 continue
@@ -724,11 +725,11 @@ def C2HLSC (cfg, optimize=False):
 
         signatures = getSignatures(cfg.top_function)
 
-        std_prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS: \n```\n{code_to_fix}```\n 
+        std_prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{code_to_fix}```\n 
         The following child functions and includes will be provided with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
         The current problem is:" \n{error}
-        \n\n also include a main function that tests the code in the same way of the reference code: \n```{cfg.test_code}\n```"""
+        \n\n include a function named {cfg.top_function} that mainains the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome."""
 
         initial_prompt = std_prompt
 
@@ -776,11 +777,11 @@ def HLSC_optimizer (cfg, code_to_optimize):
     
     # get signatures
     signatures = getSignatures(cfg.top_function)
-    initial_prompt = f"""Update the {cfg.top_function} function to optimize it for HLS targetting {opt_target}.
+    initial_prompt = f"""Update the {cfg.top_function}_hls function to optimize it for HLS targetting {cfg.opt_target}.
         The function is \n```\n{code_to_optimize}\n```\n
         The following child functions and includes will be provided to with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
-        You should include a main function that tests the code in the same way of the reference code: \n```\n{cfg.test_code}\n```"""
+        You should not change the function signature. Do not touch {cfg.top_function}, it is used for testing purposes only"""
     
     message_list=[
             {"role": "system", "content": system_content_optimizer},
@@ -873,6 +874,16 @@ def hierarchical_processing(cfg):
             cfg.test_code = f.read()
         cfg.top_function = func
         cfg.processed.append(C2HLSC(cfg))
+    
+    # write final file
+    with open(f"tmp/{cfg.top_function}_final.c", "w") as f:
+        # new file
+        f.write(libs)
+        f.write(cfg.includes)
+        for proc in cfg.processed:
+            with open(f"{proc}", "r") as p:
+                f.write(p.read())
+        f.write(cfg.test_code)
 
 
 
@@ -886,7 +897,7 @@ def log_results(cfg):
             if dir.startswith("Catapult_"):
                 catapult_dirs.append(int(dir.split("_")[1]))
 
-    log = f"Catapult_{max(catapult_dirs)}/{cfg.top_function}.v1/rtl.rpt"
+    log = f"Catapult_{max(catapult_dirs)}/{cfg.top_function}_hls.v1/rtl.rpt"
 
     capture = False
     saved_lines = []
@@ -915,7 +926,7 @@ def log_results(cfg):
         
     # copy important files
     subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"{cfg.out_folder}Catapult_{cfg.top_function}"])
-    subprocess.run(["cp", f"tmp/{cfg.top_function}_llm_opt.c", f"{cfg.out_folder}"])
+    subprocess.run(["cp", f"tmp/{cfg.top_function}_final.c", f"{cfg.out_folder}"])
 
 
 
