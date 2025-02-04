@@ -18,7 +18,7 @@ if not os.path.exists("tmp"):
 #                                 GLOBAL CONSTANTS                                     #
 #======================================================================================#
 # supported models
-models = ["claude-3-5-sonnet-20240620","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini"]
+models = ["claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini", "deepseek-chat", "deepseek-reasoner"]
 # float and fixed libraries includes
 libs = """
 #include "../include/ac_float.h"
@@ -50,6 +50,12 @@ class CFG:
             self.client = anthropic.Anthropic(
             # defaults to os.environ.get("ANTHROPIC_API_KEY")
             )
+        elif "deepseek" in self.model:
+            ds_key = os.environ.get("DEEPSEEK_API_KEY")
+            if ds_key is None:
+                print("deepseek model selected but DEEPSEEK_API_KEY not set")
+                exit(1)
+            self.client = OpenAI(base_url="https://api.deepseek.com", api_key=ds_key)
         else:
             self.client = OpenAI()
 
