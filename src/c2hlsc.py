@@ -226,12 +226,18 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         cfg.llm_output_tokens[model] += message.usage.output_tokens
         return message.content[0].text
     else: 
-        completion = cfg.client.chat.completions.create(
-            model=model,
-            messages = message_list,
-            #top_p=0.2,
-            #temperature=0.25
-        )
+        try:
+            completion = cfg.client.chat.completions.create(
+                model=model,
+                messages = message_list,
+                #top_p=0.2,
+                #temperature=0.25
+            )
+        except Exception as e:
+            print("error calling the LLM API")
+            print(f"Error: {e}")
+            exit(1)
+
         print("LLM RAW RESPONSE: ", completion)
         message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
         cfg.llm_input_tokens[model] += completion.usage.prompt_tokens
@@ -719,7 +725,7 @@ def C2HLSC (cfg, optimize=False):
                 # write final file
                 with open(f"tmp/{cfg.top_function}_final.c", "w") as f:
                     f.write(code_to_fix)
-                return f"tmp/{cfg.top_function}_final.c"
+                return HLSC_optimizer(cfg, code_to_fix)
                
         
         if "Floating-point"in error:
@@ -882,13 +888,14 @@ def hierarchical_processing(cfg):
         cfg.processed.append(C2HLSC(cfg))
     
     # write final file
-    with open(f"tmp/{cfg.top_function}_final.c", "w") as f:
+    with open(f"tmp/{cfg.top_function}_result.c", "w") as f:
         # new file
         f.write(libs)
         f.write(cfg.includes)
         for proc in cfg.processed:
             with open(f"{proc}", "r") as p:
                 f.write(p.read())
+        
         f.write(cfg.test_code)
 
 
@@ -932,7 +939,7 @@ def log_results(cfg):
         
     # copy important files
     subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"{cfg.out_folder}Catapult_{cfg.top_function}"])
-    subprocess.run(["cp", f"tmp/{cfg.top_function}_final.c", f"{cfg.out_folder}"])
+    subprocess.run(["cp", f"tmp/{cfg.top_function}_result.c", f"{cfg.out_folder}"])
 
 
 
