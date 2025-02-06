@@ -7,6 +7,7 @@ from prompts import *
 from collections import OrderedDict
 
 import os
+import glob
 from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
 
@@ -60,6 +61,7 @@ class CFG:
             self.client = OpenAI()
 
         self.opt_target = args.opt_target
+        self.opt_runs = args.opt_runs
         self.characterize = args.characterize
         print("Model: ", self.model)
         print("Optimization target: ", self.opt_target)
@@ -195,6 +197,32 @@ class PointerData():
         self.element_size = 0 # this is in ellements
 
 
+
+#--------------------------------------------------------------------------------------#
+#                          OPTIMIZATIO SOLUTION DATA CLASS                             #
+#--------------------------------------------------------------------------------------#
+class OptSolData():
+    def __init__(self, filtered_lines, filename, hls_dir):
+        # Needs Area, Latency and Throughput
+        # Code -> file or in memory?
+        # Catapult run -> folder
+        self.filtered_lines = filtered_lines
+        self.filename = filename
+        self.hls_dir = hls_dir
+        # Parse the report
+        for line in filtered_lines:
+            if "Design Total:" in line:
+                line = line.split("Design Total:")[1].split()
+                self.latency = float(line[1])
+                self.throughput = float(line[2])
+            if "Total Area Score:" in line:
+                self.area = float(line.split("Total Area Score:")[1].split()[-1])
+
+    def __str__(self):
+        return "\n".join(self.filtered_lines)
+
+    def __repr__(self):
+        return "\n".join(self.filtered_lines)
 
 ########################################################################################
 #                                      CALL LLM                                        #
@@ -462,6 +490,9 @@ def build_unit_test(func, filename, cfg):
     expr_list = []
     for param in cfg.params_table[func]:
         #if not isinstance(param[0], c_ast.PtrDecl) and not isinstance(param[0], c_ast.ArrayDecl):
+        if isinstance(param[0], c_ast.ArrayDecl): 
+            expr_list.append(c_ast.Cast(c_ast.PtrDecl( None,param[0].type) ,c_ast.ID(param[1])))
+        else:
             expr_list.append(c_ast.Cast(param[0],c_ast.ID(param[1])))
        
     # check function node for return type
@@ -509,16 +540,64 @@ def build_unit_test(func, filename, cfg):
 def getSignatures(func):
     # get all the signatures of the functions called by func
     sig_string = ""
-    for filename in cfg.processed:
-        with open(filename) as file:
+    for proc in cfg.processed:
+        with open(proc.filename) as file:
             code = file.read()
             # find line that contains the function signature
             for line in code.splitlines():
-                if filename.split("/")[1].split("_final")[0] in line:
+                if proc.filename.split("/")[1].split("_final")[0] in line:
                     sig_string += line+";\n"
                     break 
     return sig_string
 
+
+########################################################################################
+#                              PARSE LAST CATAPULT REPORT                              #
+########################################################################################
+def parse_last_catapult_report():
+    catapult_dirs = []
+    for dir in os.listdir("."):
+        if os.path.isdir(dir):
+            if dir.startswith("Catapult_"):
+                catapult_dirs.append(int(dir.split("_")[1]))
+    if catapult_dirs == []:
+        # might there be only Catapult no underscores
+        if not os.path.isdir("Catapult"):
+            print("Error: No Catapult directoris found, expected at least one run completed at this step!")
+            exit(1)
+        last_dir = "Catapult"
+    else: 
+        last_dir = f"Catapult_{max(catapult_dirs)}"
+    log = glob.glob(last_dir+f"/{cfg.top_function}*/rtl.rpt")[0]
+
+    capture = False
+    saved_lines = []
+    with open(log, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            if capture:
+                saved_lines.append(line)
+            if "Processes/Blocks" in line or "Area Scores" in line:
+                capture = True
+            if "Design Total" in line or "Total Reg" in line:
+                capture = False
+    return saved_lines, last_dir
+
+def parse_catapult_report(dir):
+    log = glob.glob(dir+f"/{cfg.top_function}*/rtl.rpt")[0]
+
+    capture = False
+    saved_lines = []
+    with open(log, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            if capture:
+                saved_lines.append(line)
+            if "Processes/Blocks" in line or "Area Scores" in line:
+                capture = True
+            if "Design Total" in line or "Total Reg" in line:
+                capture = False
+    return saved_lines
 
 
 ########################################################################################
@@ -542,7 +621,7 @@ def log_failed_runs(cfg):
 ########################################################################################
 #                                   FEEDBACK LOOP                                      #
 ########################################################################################
-def feedback_loop(message_list, cfg, postfix): # message list should contain system prompt and first user prompt
+def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list should contain system prompt and first user prompt
     error = 1
     j=0
     print("System Prompt: ", message_list[0]["content"])
@@ -587,7 +666,7 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
                 f.write(libs)
                 f.write(cfg.includes)
                 for proc in cfg.processed:
-                    with open(f"{proc}", "r") as p:
+                    with open(f"{proc.filename}", "r") as p:
                         f.write(p.read())
                 f.write(c_code_dut)
                 f.write(cfg.test_code)
@@ -644,7 +723,7 @@ def feedback_loop(message_list, cfg, postfix): # message list should contain sys
         # create a file with the formatted tcl
         tcl_file = cfg.out_folder + "initial.tcl"
         with open(tcl_file, "w") as f:
-            f.write(cfg.tcl.format(top_function=cfg.top_function+"_hls", c_file=llm_file))
+            f.write(cfg.tcl.format(top_function=synthesis_top, c_file=llm_file))
 
         print("Running catapult")
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
@@ -723,9 +802,9 @@ def C2HLSC (cfg, optimize=False):
             else:
                 print(f"{cfg.top_function} is correct, does not need any changes")
                 # write final file
-                with open(f"tmp/{cfg.top_function}_final.c", "w") as f:
+                with open(f"tmp/{cfg.top_function}_to_opt.c", "w") as f:
                     f.write(code_to_fix)
-                return HLSC_optimizer(cfg, code_to_fix)
+                return HLSC_optimizer(cfg, code_to_fix, cfg.top_function)
                
         
         if "Floating-point"in error:
@@ -769,23 +848,30 @@ def C2HLSC (cfg, optimize=False):
             {"role": "user", "content": initial_prompt}
         ]
     
-    code_to_optimize = feedback_loop(message_list, cfg, "_to_opt")
+    code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize)
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
                 
 
 
 ########################################################################################
 #                                  HLS OPTIMIZER                                       #
 ########################################################################################
-def HLSC_optimizer (cfg, code_to_optimize):
+def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     global compile_runs
     global hls_runs
-    # write initial c
-    file_name = f"tmp/{cfg.top_function}_initial_opt.c"
-    with open(file_name, "w") as f:
-        f.write(cfg.includes)
-        f.write(cfg.orig_code)
+    
+    # keep tracks of scores:
+    runs = []
+
+    # get baseline latency throughput and area
+    # Catapult was already run in the previous step
+    base_stats, hls_dir = parse_last_catapult_report()
+    base_stats= OptSolData(base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
+    runs.append(base_stats)
+    min_area = base_stats
+    min_latency = base_stats
+    min_throughput = base_stats # throughput is given in cycles, so lower is better
     
     # get signatures
     signatures = getSignatures(cfg.top_function)
@@ -793,15 +879,55 @@ def HLSC_optimizer (cfg, code_to_optimize):
         The function is \n```\n{code_to_optimize}\n```\n
         The following child functions and includes will be provided to with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
-        You should not change the function signature. Do not touch {cfg.top_function}, it is used for testing purposes only"""
+        You should not change the function signature. Do not touch {cfg.top_function}, it is used for testing purposes only.
+        The synthesis report from the base design with no optimizations is as follows: \n{base_stats}"""
     
     message_list=[
             {"role": "system", "content": system_content_optimizer},
             {"role": "user", "content": initial_prompt}
         ]
-    
-    feedback_loop(message_list, cfg, "_final")
-    return f"tmp/{cfg.top_function}_final.c"
+
+    # run n times with feedback and then get best result based on goal
+    for n in range(cfg.opt_runs): # can make this a parameter later
+        # run LLM maybe custom prompt with the additional info? should be in the message list already.
+        feedback_loop(message_list, cfg, f"_optrnd{n}", synthesis_top)
+
+        # get scurr_statstats from catapult
+        curr_stats_lines, hls_dir = parse_last_catapult_report()
+
+        # store curr stats
+        curr_stats = OptSolData(curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
+        runs.append(curr_stats)
+        # keep track of best area, latency and throughput
+        if curr_stats.area < min_area.area:
+            min_area = curr_stats
+        if curr_stats.latency < min_latency.latency:
+            min_latency = curr_stats
+        if curr_stats.throughput < min_throughput.throughput:
+            min_throughput = curr_stats
+
+        # build new prompt
+        prompt = f"""The synthesis report from the current design is as follows: \n{curr_stats} \n
+        The best area so far is: {min_area.area} 
+        The best latency so far is: {min_latency.latency} 
+        The best throughput so far is: {min_throughput.throughput}
+        Can you try improve your solution?
+        """
+        message_list.append({"role": "user", "content": prompt})
+
+    # find best result based on goal
+    if cfg.opt_target == "area":
+        best = min_area
+    elif cfg.opt_target == "latency":
+        best = min_latency
+    else:
+        best = min_throughput
+
+    # print stats of best
+    print(f"Best solution found: {best.hls_dir}")
+    print(best)
+
+    return best
 
 
 
@@ -874,7 +1000,7 @@ def hierarchical_processing(cfg):
     v.visit(ast)
     
     
-    # print(calls_table)
+    print(cfg.calls_table)
     explore_calls(cfg.top_function, cfg.hierarchical_calls, cfg) # inits hierarchical_calls
 
     # print("Hierarchical calls: ", cfg.hierarchical_calls)
@@ -893,7 +1019,7 @@ def hierarchical_processing(cfg):
         f.write(libs)
         f.write(cfg.includes)
         for proc in cfg.processed:
-            with open(f"{proc}", "r") as p:
+            with open(f"{proc.filename}", "r") as p:
                 f.write(p.read())
         
         f.write(cfg.test_code)
@@ -904,25 +1030,7 @@ def hierarchical_processing(cfg):
 #                                    LOG RESULTS                                       #
 ########################################################################################
 def log_results(cfg):
-    catapult_dirs = []
-    for dir in os.listdir("."):
-        if os.path.isdir(dir):
-            if dir.startswith("Catapult_"):
-                catapult_dirs.append(int(dir.split("_")[1]))
-
-    log = f"Catapult_{max(catapult_dirs)}/{cfg.top_function}_hls.v1/rtl.rpt"
-
-    capture = False
-    saved_lines = []
-    with open(log, "r") as f:
-        lines = f.readlines()
-        for line in lines:
-            if capture:
-                saved_lines.append(line)
-            if "Processes/Blocks" in line or "Area Scores" in line:
-                capture = True
-            if "Design Total" in line or "Total Reg" in line:
-                capture = False
+    
     with open(f"{cfg.out_folder}{cfg.top_function}.log", "w") as f:
         for model in models:
             if cfg.llm_runs[model] == 0:
@@ -935,10 +1043,10 @@ def log_results(cfg):
         print(f"HLS runs: {cfg.hls_runs}", file=f)
         print(f"Compile runs: {cfg.compile_runs}", file=f)
         print("")    
-        print("".join(saved_lines), file=f)
+        print(cfg.processed[-1], file=f)
         
     # copy important files
-    subprocess.run(["cp", "-r", f"Catapult_{max(catapult_dirs)}", f"{cfg.out_folder}Catapult_{cfg.top_function}"])
+    subprocess.run(["cp", "-r", cfg.processed[-1].hls_dir, f"{cfg.out_folder}Catapult_{cfg.top_function}"])
     subprocess.run(["cp", f"tmp/{cfg.top_function}_result.c", f"{cfg.out_folder}"])
 
 
@@ -953,9 +1061,11 @@ if __name__ == "__main__":
     # model name optional argument from a list of models
     modes = ["standard", "streaming"] # from yaml file claude-3-5-sonnet-20240620
     parser.add_argument('--model', type=str, default="adaptive", choices=models, help='model name to use, default is adaptive')
-    opt_target = ["area", "latency"]
-    parser.add_argument('--opt_target', type=str, default="area", choices=opt_target, help='optimization target, default is area')
+    opt_target = ["throughput", "latency"]
+    parser.add_argument('--opt_target', type=str, default="latency", choices=opt_target, help='optimization target, default is latency, options are: throughput, latency')
     parser.add_argument('--characterize', type=bool, default=False,  help='using this option will run the benchmark characterization')
+    parser.add_argument('--opt_runs', type=int, default=3,  help='Number of optimization runs, default is 3')
+
     args = parser.parse_args()
     cfg = CFG(args)
     if cfg.characterize:
