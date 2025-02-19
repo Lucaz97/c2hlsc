@@ -554,7 +554,7 @@ def getSignatures(func):
             code = file.read()
             # find line that contains the function signature
             for line in code.splitlines():
-                if proc.filename.split("/")[1].split("_final")[0] in line:
+                if "_hls(" in line: # all hls functions have _hls in their name
                     sig_string += line+";\n"
                     break 
     return sig_string
@@ -882,10 +882,10 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     # Catapult was already run in the previous step
     base_stats, hls_dir = parse_last_catapult_report()
     base_stats= OptSolData(base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
-    runs.append(base_stats)
-    min_area = base_stats
-    min_latency = base_stats
-    min_throughput = base_stats # throughput is given in cycles, so lower is better
+    #runs.append(base_stats)
+    min_area = None
+    min_latency = None
+    min_throughput = None # throughput is given in cycles, so lower is better
     
     # get signatures
     signatures = getSignatures(cfg.top_function)
@@ -893,7 +893,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
         The function is \n```\n{code_to_optimize}\n```\n
         The following child functions and includes will be provided to with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
-        You should not change the function signature. Do not touch {cfg.top_function}, it is used for testing purposes only.
+        You should not change the function signature. Do not touch {cfg.top_function} and provide it back as is, it is used for testing purposes only.
         The synthesis report from the base design with no optimizations is as follows: \n{base_stats}"""
     
     message_list=[
@@ -913,12 +913,17 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
         curr_stats = OptSolData(curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
         runs.append(curr_stats)
         # keep track of best area, latency and throughput
-        if curr_stats.area < min_area.area:
+        if min_area == None:
             min_area = curr_stats
-        if curr_stats.latency < min_latency.latency:
             min_latency = curr_stats
-        if curr_stats.throughput < min_throughput.throughput:
             min_throughput = curr_stats
+        else:
+            if curr_stats.area < min_area.area:
+                min_area = curr_stats
+            if curr_stats.latency < min_latency.latency:
+                min_latency = curr_stats
+            if curr_stats.throughput < min_throughput.throughput:
+                min_throughput = curr_stats
 
         # build new prompt
         prompt = f"""The synthesis report from the current design is as follows: \n{curr_stats} \n
@@ -1115,7 +1120,7 @@ if __name__ == "__main__":
     opt_target = ["throughput", "latency"]
     parser.add_argument('--opt_target', type=str, default="latency", choices=opt_target, help='optimization target, default is latency, options are: throughput, latency')
     parser.add_argument('--characterize', type=bool, default=False,  help='using this option will run the benchmark characterization')
-    parser.add_argument('--opt_runs', type=int, default=3,  help='Number of optimization runs, default is 3')
+    parser.add_argument('--opt_runs', type=int, default=1,  help='Number of optimization runs, default is 1')
 
     args = parser.parse_args()
     cfg = CFG(args)
