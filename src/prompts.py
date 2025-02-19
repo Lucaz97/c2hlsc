@@ -168,6 +168,12 @@ In the usage of the parameter a you can use the array notation as well, like a[i
 
 """
 
+reduce_array_prompt = """
+If a pointer on an interface is referenced by an error like "Unable to reduce array size for variable X"
+you can hint the tool by using the array notation like void foo(int X[SIZE]); instead of void foo(int *X);
+You should replace the SIZE with an upperbound of the array size.
+"""
+
 redefinition_prompt = """
 To solve this problem you can get rid of the function in the error as I have already defined it in my code.
 """ 

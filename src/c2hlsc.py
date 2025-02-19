@@ -744,18 +744,21 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
                 print("Error: ", error)
-                prompt = "Help me rewrite this function to be compatible with HLS: \n" + c_code_dut + "\n The current problem is:" + error
                 if "Floating-point"in error:
-                    prompt += floating_point_prompt
+                    error += floating_point_prompt
                 elif "recursion" in error:
-                    prompt += recursion_prompt
-                elif "reduce array size" in error:
-                    prompt += reduce_array_prompt
+                    error += recursion_prompt
                 elif "pointer" in error:
-                    prompt += pointer_prompt
+                    error += pointer_prompt
 
-                prompt += f"""include a function named {cfg.top_function} that mainains the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. 
-                I will call this function in an automated test and provide feedback on the outcome."""       
+                signatures = getSignatures(cfg.top_function)
+
+                prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{c_code_dut}```\n 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                \n```{cfg.includes}\n{signatures}\n```\n
+                The current problem is:" \n{error}
+                \n\n include a function named {cfg.top_function} that keeps the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome."""
+
                 message_list = [{"role": "system", "content": system_content_c2hlsc},
                 {"role": "user", "content": prompt}]
                 continue
@@ -831,7 +834,7 @@ def C2HLSC (cfg, optimize=False):
         The following child functions and includes will be provided with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
         The current problem is:" \n{error}
-        \n\n include a function named {cfg.top_function} that mainains the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome."""
+        \n\n include a function named {cfg.top_function} that keeps the original function signature and calls the new {cfg.top_function}_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome."""
 
         initial_prompt = std_prompt
 

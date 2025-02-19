@@ -9,7 +9,7 @@ Python dependencies:
     python3.11 -m pip install pycparser openai anthropic pyyaml
 
 An API key for the model in use is needed.
-It can be set as an environment variable (ANTHROPIC_API_KEY or OPENAI_API_KEY)
+It can be set as an environment variable (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
 
 ### Input Structure
 The C/C++ code should be split into 3 files:

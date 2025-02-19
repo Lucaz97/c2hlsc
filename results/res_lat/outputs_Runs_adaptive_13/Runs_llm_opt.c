@@ -8,11 +8,12 @@ int epsilon[N]; // array of 0s and 1s
 
 void Runs(int *res_S, int *res_V)
 {
-    int S = 0;
-    int V = 1;
-    int prev_value = 0; // To store the previous value of epsilon for V calculation
+    static int S = 0;
+    static int V = 1;
+    static int prev_value = 0; // To store the previous value of epsilon for V calculation
 
-    #pragma hls_unroll yes
+   // #pragma hls_unroll yes
+   FOR:
     for (int k = 0; k < 65535; k++) {
         if (epsilon[k]) {
             S++;
@@ -21,6 +22,8 @@ void Runs(int *res_S, int *res_V)
             V++;
         }
         prev_value = epsilon[k]; // Update the previous value
+        S++;
+        V++;
     }
 
     *res_S = S;
@@ -36,5 +39,9 @@ int main(){
     Runs(&result_S, &result_V);
 
     printf("result S = %d\n", result_S);
-    printf("result S = %d\n", result_V);
+    printf("result V= %d\n", result_V);
+    if(result_S == 9363 && result_V == 18725){
+        printf("results are correct"); 
+        return 0;}
+    return 1;
 }
