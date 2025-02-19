@@ -306,12 +306,21 @@ def fix_repeat(string):
         else:
             fixed += element
             fixed += ","
-    fixed = fixed[:-1]
-    to_expand = item_to_fix.split("<repeats")[0] + ","
-    times = int(item_to_fix.split("repeats")[1].split("times>")[0])
-    expanded = to_expand * times
+    if "times>]" in item_to_fix:
+        # the repeat is at the end
+        to_expand = item_to_fix.split("<repeats")[0] + ","
+        times = int(item_to_fix.split("repeats")[1].split("times>")[0])
+        expanded = to_expand * times
+        fixed = fixed.format(expanded=expanded)
+        fixed = fixed[:-1]+"]"
+    else:
+        fixed = fixed[:-1]
+        to_expand = item_to_fix.split("<repeats")[0] + ","
+        times = int(item_to_fix.split("repeats")[1].split("times>")[0])
+        expanded = to_expand * times
+        fixed = fixed.format(expanded=expanded)
     # print(fixed.format(expanded=expanded))
-    return fixed.format(expanded=expanded)
+    return fixed
 
 
 ########################################################################################
@@ -380,7 +389,7 @@ def build_unit_test(func, filename, cfg):
             elif "region" in line:
                 #print(line)
                 # 0x507000000090 is located 0 bytes inside of 80-byte region [0x507000000090,0x5070000000e0)
-                offset = int(line.spluint32_t("inside of ")[1].split("-byte")[0])
+                offset = int(line.split("inside of ")[1].split("-byte")[0])
                 base = int(line.split("[")[1].split(",")[0], 16)
                 #print(offset, size, hex(base), idx)
                 pointers_table[keys_list[idx]].byte_offset = offset
@@ -740,6 +749,8 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
                     prompt += floating_point_prompt
                 elif "recursion" in error:
                     prompt += recursion_prompt
+                elif "reduce array size" in error:
+                    prompt += reduce_array_prompt
                 elif "pointer" in error:
                     prompt += pointer_prompt
 
@@ -929,6 +940,43 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
 
     return best
 
+
+########################################################################################
+#                               MULTIPLE CHOICE KNACK SACK                             #
+########################################################################################
+def solve_mckp(items, capacity):
+    # DP state: {weight: (max_value, [selected_option_indices])}
+    dp = {0: (0, [])}
+    
+    for idx, options in enumerate(items):
+        temp_dp = {}
+        for current_weight, (current_value, path) in dp.items():
+            for opt_idx, (w, v) in enumerate(options):
+                new_weight = current_weight + w
+                new_value = current_value + v
+                if new_weight > capacity:
+                    continue
+                # Update if this path to new_weight is better
+                if new_weight not in temp_dp or new_value > temp_dp[new_weight][0]:
+                    new_path = path + [opt_idx]
+                    temp_dp[new_weight] = (new_value, new_path)
+        dp = temp_dp
+    
+    if not dp:
+        return 0, []
+    max_weight = max(dp, key=lambda w: dp[w][0])
+    max_value, selected_options = dp[max_weight]
+    return max_value, selected_options
+
+# # Example usage:
+# items = [
+#     [(10, 60), (15, 80)],   # Item 1 options
+#     [(20, 100), (25, 120)], # Item 2 options
+# ]
+# capacity = 50
+# max_value, selected = solve_mckp(items, capacity)
+# print(f"Max Value: {max_value}")  # Output: 200
+# print(f"Selected Options: {selected}")  # Output: [1, 1] (0-based indices)
 
 
 ########################################################################################
