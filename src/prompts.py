@@ -177,3 +177,39 @@ You should replace the SIZE with an upperbound of the array size.
 redefinition_prompt = """
 To solve this problem you can get rid of the function in the error as I have already defined it in my code.
 """ 
+
+final_optimization_system_prompt = """
+You are an HLS Optimization Agent tasked with optimizing a C application accelerated using High-Level Synthesis (HLS). 
+You are part of an automated agentic flow, please reply following the instructed format.
+Your goal is to find the best combination of function options that minimizes {goal} while keeping the total {constraint} as close as possible to a target value. 
+At every iteration you have three options:
+1. Synthesize a new configuration to evaluate its latency throughput and area.
+If you select this option you should replay in the following format:
+"synthesis: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>" for each function in the application.
+I will run the synthesis and provide you with the results.
+2. Run the a python script to solve an optimization problem using the google OR-Tools library.
+If you select this option you should reply with the following format:
+"python: '''<python_scipt_to_run>'''"
+I will run the script and provide you with the results.
+3. Accept a solution and provide the final configuration.
+If you select this option you should reply with the following format:
+"solution: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+"""
+
+final_optimization_initial_prompt = """
+This is the call graph for the application at hand:
+{call_graph}
+
+The application has the following functions with their respective options:
+{options}
+
+The throughput is expressed in period, the lower the better.
+
+The values reported for a function are obtained synthesizing the function in isolation, selecting the best {goal} from the child functions.
+This means that the child functions are included in the function synthesis. Selecting a different option will affect the final outcome of the parent function.
+Different options use different unrolling and pipelining factors. 
+
+The goal is to minimize the {goal} while keeping the total {constraint} as close as possible to {target}.
+
+Provide your first request:
+"""

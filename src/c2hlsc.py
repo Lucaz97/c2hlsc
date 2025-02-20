@@ -10,6 +10,7 @@ import os
 import glob
 from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
+import pickle
 
 # make dir if does not exist
 if not os.path.exists("tmp"):
@@ -60,11 +61,10 @@ class CFG:
         else:
             self.client = OpenAI()
 
-        self.opt_target = args.opt_target
-        self.opt_runs = args.opt_runs
+        
         self.characterize = args.characterize
         print("Model: ", self.model)
-        print("Optimization target: ", self.opt_target)
+        
 
         # parse yaml file with orig code test code includes and tcl; and top function
         with open(args.config, "r") as f:
@@ -115,6 +115,13 @@ class CFG:
         self.llm_output_tokens = {model: 0 for model in models}
         self.hls_runs = 0
         self.compile_runs = 0
+
+        self.opt_target = args.opt_target
+        self.opt_runs = args.opt_runs
+        self.opt_constraint = args.opt_constraint
+        self.opt_constraint_tgt = args.opt_constraint_tgt
+        self.opt_solutions= []
+        print("Optimization target: ", self.opt_target)
 
 
 
@@ -199,10 +206,11 @@ class PointerData():
 
 
 #--------------------------------------------------------------------------------------#
-#                          OPTIMIZATIO SOLUTION DATA CLASS                             #
+#                            OPTIMIZED SOLUTION DATA CLASS                             #
 #--------------------------------------------------------------------------------------#
 class OptSolData():
-    def __init__(self, filtered_lines, filename, hls_dir):
+    def __init__(self,function_name, filtered_lines, filename, hls_dir):
+        self.function_name = function_name
         # Needs Area, Latency and Throughput
         # Code -> file or in memory?
         # Catapult run -> folder
@@ -223,6 +231,43 @@ class OptSolData():
 
     def __repr__(self):
         return "\n".join(self.filtered_lines)
+
+#--------------------------------------------------------------------------------------#
+#                             FINAL OPTIMIZATIO DATA CLASS                             #
+#--------------------------------------------------------------------------------------#
+class FinalOptData():
+    def __init__(self,function_name, filtered_lines, filename, hls_dir, config):
+        self.function_name = function_name
+        # Needs Area, Latency and Throughput
+        # Code -> file or in memory?
+        # Catapult run -> folder
+        self.filtered_lines = filtered_lines
+        self.filename = filename
+        self.hls_dir = hls_dir
+        # Parse the report
+        for line in filtered_lines:
+            if "Design Total:" in line:
+                line = line.split("Design Total:")[1].split()
+                self.latency = float(line[1])
+                self.throughput = float(line[2])
+            if "Total Area Score:" in line:
+                self.area = float(line.split("Total Area Score:")[1].split()[-1])
+
+        self.config = config # this is the configuration that was used to generate this solution
+
+    def __str__(self):
+        return "\n".join(self.filtered_lines)
+
+    def __repr__(self):
+        return "\n".join(self.filtered_lines)
+    
+    def __eq__(self, value):
+        if isinstance(value, dict):
+            return self.config == value
+        elif not isinstance(value, FinalOptData):
+            return False
+        return self.function_nane == value.function_name and self.config == value.config
+    
 
 ########################################################################################
 #                                      CALL LLM                                        #
@@ -881,7 +926,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     # get baseline latency throughput and area
     # Catapult was already run in the previous step
     base_stats, hls_dir = parse_last_catapult_report()
-    base_stats= OptSolData(base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
+    base_stats= OptSolData(f"{cfg.top_function}_hls", base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
     #runs.append(base_stats)
     min_area = None
     min_latency = None
@@ -910,7 +955,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
         curr_stats_lines, hls_dir = parse_last_catapult_report()
 
         # store curr stats
-        curr_stats = OptSolData(curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
+        curr_stats = OptSolData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
         runs.append(curr_stats)
         # keep track of best area, latency and throughput
         if min_area == None:
@@ -942,6 +987,8 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     else:
         best = min_throughput
 
+    # Add all alternatives to the solutions list. 
+    cfg.opt_solutions.extend(runs)
     # print stats of best
     print(f"Best solution found: {best.hls_dir}")
     print(best)
@@ -950,42 +997,153 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
 
 
 ########################################################################################
-#                               MULTIPLE CHOICE KNACK SACK                             #
+#                                  Final Optimization                                  #
 ########################################################################################
-def solve_mckp(items, capacity):
-    # DP state: {weight: (max_value, [selected_option_indices])}
-    dp = {0: (0, [])}
-    
-    for idx, options in enumerate(items):
-        temp_dp = {}
-        for current_weight, (current_value, path) in dp.items():
-            for opt_idx, (w, v) in enumerate(options):
-                new_weight = current_weight + w
-                new_value = current_value + v
-                if new_weight > capacity:
-                    continue
-                # Update if this path to new_weight is better
-                if new_weight not in temp_dp or new_value > temp_dp[new_weight][0]:
-                    new_path = path + [opt_idx]
-                    temp_dp[new_weight] = (new_value, new_path)
-        dp = temp_dp
-    
-    if not dp:
-        return 0, []
-    max_weight = max(dp, key=lambda w: dp[w][0])
-    max_value, selected_options = dp[max_weight]
-    return max_value, selected_options
+def final_optimization(cfg):
+    # Agent has three choices:
+    #   1. Synthesize a new configuration to evaluate its latency throughput and area.
+    #   If you select this option you should replay in the following format:
+    #   "synthesis: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>" for each function in the application.
+    #   I will run the synthesis and provide you with the results.
+    #   2. Run the a python script to solve an optimization problem using the google OR-Tools library.
+    #   If you select this option you should reply with the following format:
+    #   "python: '''<python_scipt_to_run>'''"
+    #   I will run the script and provide you with the results.
+    #   3. Accept a solution and provide the final configuration.
+    #   If you select this option you should reply with the following format:
+    #   "solution: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+    # count number of synthesis
+    synt_n = 0
+    python_n = 0
+    explored_solutions = []
+    # prepare function options
+    options = {function_name: [solution for solution in cfg.opt_solutions if solution.function_name == function_name] for function_name in cfg.hierarchical_calls}
+    print("Options: ", options)
 
-# # Example usage:
-# items = [
-#     [(10, 60), (15, 80)],   # Item 1 options
-#     [(20, 100), (25, 120)], # Item 2 options
-# ]
-# capacity = 50
-# max_value, selected = solve_mckp(items, capacity)
-# print(f"Max Value: {max_value}")  # Output: 200
-# print(f"Selected Options: {selected}")  # Output: [1, 1] (0-based indices)
+    # print all opt_solutions
+    function_options = ""
+    for sol in cfg.opt_solutions:
+        function_options+=f"Option for {sol.function_name} -  area: {sol.area}, latency: {sol.latency}, throughput: {sol.throughput}\n"
+    # prepare first prompt
+    initial_prompt = final_optimization_initial_prompt.format(call_graph=cfg.hierarchical_calls, 
+                                                              options=function_options, goal=cfg.opt_target, 
+                                                              constraint=cfg.opt_constraint, target=cfg.opt_constraint_tgt)
+    sys_prompt = final_optimization_system_prompt.format(goal=cfg.opt_target, constraint=cfg.opt_constraint)
 
+    message_list=[
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": initial_prompt}
+    ]
+    if cfg.model == "adaptive":
+        model_name = "gpt-4o"
+    else: 
+        model_name = cfg.model
+    while True:
+        # prompt llm
+        response = call_llm(model_name, message_list, cfg)
+        print( response)
+        cfg.llm_runs[model_name] += 1
+        if "synthesis" in response:
+            # run synthesis
+            # parse response
+            response = response.split("synthesis: ")[1]
+            config = {}
+            with open(f"{cfg.top_function}_agent_{synt_n}.c", "w") as f:  
+                f.write(libs)
+                f.write(cfg.includes)
+                for func in response.split(","):
+                    func_name, option = func.split(" ")
+                    # find the option
+                    opt_filename = options[func_name][int(option)].filename
+                    config[func_name] = int(option)
+                    with open(opt_filename, "r") as opt:
+                        f.write(opt.read())
+            
+            if config not in explored_solutions:
+                # run catapult
+                tcl_file = cfg.out_folder + "agent.tcl"
+                with open(tcl_file, "w") as f:
+                    f.write(cfg.tcl.format(top_function=cfg.top_function, c_file=f"{cfg.top_function}_agent_{synt_n}.c"))
+                subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+                cfg.hls_runs += 1
+                synt_n += 1
+            
+                # parse log
+                curr_stats_lines, hls_dir = parse_last_catapult_report()
+
+                # store curr stats
+                curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir, config)
+                explored_solutions.append(curr_stats)
+                # print curr stats
+                print(curr_stats)
+                # prepare response prompt
+                prompt = f"""The synthesis report from last configuration is as follows: \n{curr_stats} \n"""
+            else:
+                print("Configuration already explored:")
+                curr_stats = explored_solutions[explored_solutions.index(config)]
+                print(curr_stats)
+                prompt = f"""The configuration has already been explored, the synthesis report is as follows: \n{curr_stats} \n"""
+            
+            message_list.append({"role": "user", "content": prompt})
+            
+        elif "python" in response:
+            # run python script
+            # parse script
+            script = response.split("python: '''")[1].split("'''")[0]
+            # run code in sandbox
+            with open("tmp/python_script_agent_{python_n}.py", "w") as f:
+                f.write(script)
+            with open("python_script_agent_{python_n}_output.txt", "r") as f:
+                subprocess.run(["python3.11", "tmp/python_script_agent_{python_n}.py", script], stdout=f, stderr=subprocess.STDOUT)
+            python_n += 1
+            #prepare response prompt
+            with open("python_script_agent_{python_n}_output.txt", "r") as f:
+                output = f.read()
+            prompt = f"The output of the script is: \n{output}"
+            message_list.append({"role": "user", "content": prompt})
+            
+        elif "solution" in response:
+            # accept solution
+            # parse response
+            response = response.split("solution: ")[1]
+            config = {}
+            
+            for func in response.split(","):
+                func_name, option = func.split(" ")
+                # find the option
+                config[func_name] = int(option)
+            # check if new solution or already explored
+            if config in explored_solutions:
+                return explored_solutions[explored_solutions.index(config)]
+            else:
+                # run catapult
+                with open(f"{cfg.top_function}_agent_{synt_n}.c", "w") as f:  
+                    f.write(libs)
+                    f.write(cfg.includes)
+                    for func_name, idx in config.items():
+                        opt_filename = options[func_name][idx].filename
+                        with open(opt_filename, "r") as opt:
+                            f.write(opt.read())
+                
+                tcl_file = cfg.out_folder + "agent.tcl"
+                with open(tcl_file, "w") as f:
+                    f.write(cfg.tcl.format(top_function=cfg.top_function, c_file=f"{cfg.top_function}_agent_{synt_n}.c"))
+                subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+                cfg.hls_runs += 1
+                synt_n += 1
+            
+                # parse log
+                curr_stats_lines, hls_dir = parse_last_catapult_report()
+
+                # store curr stats
+                curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir, config)
+                explored_solutions.append(curr_stats)
+                # print curr stats
+                print(curr_stats)
+                return curr_stats
+        else:
+            print("Invalid response, please try again")
+            continue
 
 ########################################################################################
 #                               CHARACTERIZE BENCHMARK                                 #
@@ -1079,9 +1237,12 @@ def hierarchical_processing(cfg):
                 f.write(p.read())
         
         f.write(cfg.test_code)
-
-
-
+    
+    
+    with open(f"tmp/{cfg.top_function}_cfg.pkl", "wb") as f:
+        pickle.dump(cfg, f)
+    final_optimization(cfg)
+    
 ########################################################################################
 #                                    LOG RESULTS                                       #
 ########################################################################################
@@ -1120,19 +1281,28 @@ if __name__ == "__main__":
     opt_target = ["throughput", "latency"]
     parser.add_argument('--opt_target', type=str, default="latency", choices=opt_target, help='optimization target, default is latency, options are: throughput, latency')
     parser.add_argument('--characterize', type=bool, default=False,  help='using this option will run the benchmark characterization')
-    parser.add_argument('--opt_runs', type=int, default=1,  help='Number of optimization runs, default is 1')
+    parser.add_argument('--opt_runs', type=int, default=3,  help='Number of optimization runs, default is 1')
+    parser.add_argument('--opt_constraint', type=str, default="area",  help='Optimization constraint, default is area')
+    parser.add_argument('--opt_constraint_tgt', type=int, default=15000,  help='Optimization constraint, default is 15000')
+    parser.add_argument('--from_saved', type=str, default=None,  help='pickle file to load cfg from')
 
     args = parser.parse_args()
-    cfg = CFG(args)
-    if cfg.characterize:
-        characterize_benchmark()
-        exit(0)
+    if args.from_saved:
+        with open(args.from_saved, "rb") as f:
+            cfg = pickle.load(f)
+        final_optimization(cfg)
 
-    if not cfg.hierarchical:
-        C2HLSC(cfg)
     else:
-        hierarchical_processing(cfg)
-    
+        cfg = CFG(args)
+        if cfg.characterize:
+            characterize_benchmark()
+            exit(0)
+
+        if not cfg.hierarchical:
+            C2HLSC(cfg)
+        else:
+            hierarchical_processing(cfg)
+        
     print("DONE!")
 
     ## log results
