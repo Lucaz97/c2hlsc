@@ -54,6 +54,14 @@ go analyze
 solution design set {top_function} -top
 go compile
 solution library add nangate-45nm_beh -- -rtlsyntool DesignCompiler -vendor Nangate -technology 045nm
+solution library add ram_nangate-45nm_pipe_beh
+solution library add ram_nangate-45nm-dualport_beh
+solution library add ram_nangate-45nm-separate_beh
+solution library add ram_nangate-45nm-singleport_beh
+solution library add ram_nangate-45nm-register-file_beh
+solution library add rom_nangate-45nm_beh
+solution library add rom_nangate-45nm-sync_regin_beh
+solution library add rom_nangate-45nm-sync_regout_beh
 go libraries
 directive set -CLOCKS {{clk {{-CLOCK_PERIOD 20.0 -CLOCK_EDGE rising -CLOCK_UNCERTAINTY 0.0 -CLOCK_HIGH_TIME 10.0 -RESET_SYNC_NAME rst_n -RESET_ASYNC_NAME arst_n -RESET_KIND sync -RESET_SYNC_ACTIVE low -RESET_ASYNC_ACTIVE low -ENABLE_ACTIVE high}}}}
 go assembly
