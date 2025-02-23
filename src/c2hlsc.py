@@ -5,7 +5,8 @@ import yaml
 import anthropic 
 from prompts import *
 from collections import OrderedDict
-
+import traceback
+import sys
 import os
 import glob
 from pycparser import c_ast, parse_file, c_generator, c_parser
@@ -36,7 +37,7 @@ for(int _i = 0; _i < {size}; _i++) {{
 printf("\\n");
 }}
 """
-
+llm_api_errors = 0
 
 
 #--------------------------------------------------------------------------------------#
@@ -67,6 +68,7 @@ class CFG:
         
 
         # parse yaml file with orig code test code includes and tcl; and top function
+        self.benchmark_name = args.config.split("/")[1]
         with open(args.config, "r") as f:
             config = yaml.safe_load(f)
 
@@ -80,6 +82,7 @@ class CFG:
         else:
             self.hierarchical = False
 
+        
         print("Running in mode: ", self.mode, "Hierarchical: ", self.hierarchical)
 
         # read orig code from config
@@ -96,6 +99,7 @@ class CFG:
             self.tcl = f.read()
 
         self.top_function = config["top_function"]
+        self.orig_top = config["top_function"]
         # out folder
         self.out_folder = f"outputs_{self.top_function}"
         idx = 1
@@ -116,14 +120,33 @@ class CFG:
         self.hls_runs = 0
         self.compile_runs = 0
 
+        self.postfix="_hls"
         self.opt_target = args.opt_target
         self.opt_runs = args.opt_runs
-        self.opt_constraint = args.opt_constraint
-        self.opt_constraint_tgt = args.opt_constraint_tgt
+        if "opt_constraint" in config:
+            self.opt_constraint = config["opt_constraint"]
+        if "opt_constraint_tgt" in config:
+            self.opt_constraint_tgt = config["opt_constraint_tgt"]
         self.opt_solutions= []
         print("Optimization target: ", self.opt_target)
 
-
+    def __getstate__(self):
+        # Create copy of object's dictionary without client
+        state = self.__dict__.copy()
+        del state['client']
+        return state
+    
+    def __setstate__(self, state):
+        # Restore instance attributes
+        self.__dict__.update(state)
+        # Reinitialize client after unpickling
+        if "claude" in self.model:
+            self.client = anthropic.Anthropic()
+        elif "deepseek" in self.model:
+            ds_key = os.environ.get("DEEPSEEK_API_KEY")
+            self.client = OpenAI(base_url="https://api.deepseek.com", api_key=ds_key)
+        else:
+            self.client = OpenAI()
 
 #--------------------------------------------------------------------------------------#
 #                          TOP FUNCTION VISITOR CLASS                                  #
@@ -273,6 +296,7 @@ class FinalOptData():
 #                                      CALL LLM                                        #
 ########################################################################################
 def call_llm(model, message_list, cfg):  # unified interface for calling different LLM API based on the model
+    global llm_api_errors
     if "claude" in model:
         system_content = message_list[0]["content"]
         mlist = message_list[1:]
@@ -293,7 +317,7 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             else: 
                 print(e)
                 exit(1)
-        print("LLM RAW RESPONSE: ", message)
+        print("LLM RAW RESPONSE: ", message, "\n ---- \n")
         message_list.append({"role": "assistant", "content": message.content[0].text})
         cfg.llm_input_tokens[model] += message.usage.input_tokens
         cfg.llm_output_tokens[model] += message.usage.output_tokens
@@ -307,10 +331,15 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
                 #temperature=0.25
             )
         except Exception as e:
+            if "Expecting value:" in str(e) and llm_api_errors < 5:
+                llm_api_errors += 1
+                return call_llm(model, message_list, cfg)
+            
             print("error calling the LLM API")
             print(f"Error: {e}")
+            print(traceback.format_exc())
             exit(1)
-
+        llm_api_errors = 0
         print("LLM RAW RESPONSE: ", completion)
         message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
         cfg.llm_input_tokens[model] += completion.usage.prompt_tokens
@@ -409,7 +438,8 @@ def build_unit_test(func, filename, cfg):
             dbg_out += "STDERR\n"
             dbg_out += stderr_data.replace(", \n", ",")
             print(dbg_out, file=f) # this is just for debugging
-    
+        print(cfg.params_table)
+        print(pointers_table)
         keys_list = list(pointers_table.keys())
         idx = 0 # tracks pointer number
         for line in dbg_out.split("\n"):
@@ -447,14 +477,15 @@ def build_unit_test(func, filename, cfg):
                 # Address 0x7ffff3f00048 is located in stack of thread T0 at offset 72 in frame
                 base = int(line.split("Address ")[1].split(" is")[0], 16)
             elif "Memory access" in line: 
-                #print(line)
+                # print(line)
                 # [32, 112) 'array3' (line 19) <== Memory access at offset 72 is inside this variable
                 # base is taken from elif above
                 # offset is given from frame pointer, have to shift it to our base
                 offset = (int(line.split("offset ")[1].split(" is")[0]) - int(line.split("[")[1].split(",")[0])) 
                 size = int(line.split("[")[1].split(",")[1].split(")")[0]) - int(line.split("[")[1].split(",")[0])
                 base = base - offset
-                #print(offset, size, hex(base), idx)
+                # print(offset, size, hex(base), idx)
+                # print(keys_list)
                 pointers_table[keys_list[idx]].byte_offset = offset
                 pointers_table[keys_list[idx]].byte_size = size
                 pointers_table[keys_list[idx]].base = base
@@ -622,7 +653,13 @@ def parse_last_catapult_report():
         last_dir = "Catapult"
     else: 
         last_dir = f"Catapult_{max(catapult_dirs)}"
-    log = glob.glob(last_dir+f"/{cfg.top_function}*/rtl.rpt")[0]
+    print("Last Catapult run: ", last_dir)
+
+    try:
+        log = glob.glob(last_dir+f"/{cfg.top_function}*/rtl.rpt")[0]
+    except:
+        print("Last Catapult run failed")
+        return None, last_dir
 
     capture = False
     saved_lines = []
@@ -863,6 +900,7 @@ def C2HLSC (cfg, optimize=False):
                 # write final file
                 with open(f"tmp/{cfg.top_function}_to_opt.c", "w") as f:
                     f.write(code_to_fix)
+                cfg.postfix = ""
                 return HLSC_optimizer(cfg, code_to_fix, cfg.top_function)
                
         
@@ -909,7 +947,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls", "_hls")
                 
 
 
@@ -926,7 +964,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     # get baseline latency throughput and area
     # Catapult was already run in the previous step
     base_stats, hls_dir = parse_last_catapult_report()
-    base_stats= OptSolData(f"{cfg.top_function}_hls", base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
+    base_stats= OptSolData(f"{cfg.top_function}{cfg.postfix}", base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
     #runs.append(base_stats)
     min_area = None
     min_latency = None
@@ -934,11 +972,12 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     
     # get signatures
     signatures = getSignatures(cfg.top_function)
-    initial_prompt = f"""Update the {cfg.top_function}_hls function to optimize it for HLS targetting {cfg.opt_target}.
+    postfix_clarification = f"Do not touch {cfg.top_function} and provide it back as is, it is used for testing purposes only." if not cfg.postfix == "" else ""
+    initial_prompt = f"""Update the {cfg.top_function}{cfg.postfix} function to optimize it for HLS targetting {cfg.opt_target}.
         The function is \n```\n{code_to_optimize}\n```\n
         The following child functions and includes will be provided to with the following signature, assume them present in the code:
         \n```{cfg.includes}\n{signatures}\n```\n
-        You should not change the function signature. Do not touch {cfg.top_function} and provide it back as is, it is used for testing purposes only.
+        You should not change the function signature. {postfix_clarification}
         The synthesis report from the base design with no optimizations is as follows: \n{base_stats}"""
     
     message_list=[
@@ -955,7 +994,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
         curr_stats_lines, hls_dir = parse_last_catapult_report()
 
         # store curr stats
-        curr_stats = OptSolData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
+        curr_stats = OptSolData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
         runs.append(curr_stats)
         # keep track of best area, latency and throughput
         if min_area == None:
@@ -1016,20 +1055,28 @@ def final_optimization(cfg):
     synt_n = 0
     python_n = 0
     explored_solutions = []
+    errors = 0
     # prepare function options
-    options = {function_name: [solution for solution in cfg.opt_solutions if solution.function_name == function_name] for function_name in cfg.hierarchical_calls}
-    print("Options: ", options)
+    f_names = list(set([solution.function_name for solution in cfg.opt_solutions]))
+    #print(cfg.hierarchical_calls)
+    options = {function_name: [solution for solution in cfg.opt_solutions if solution.function_name == function_name] for function_name in f_names}
 
     # print all opt_solutions
     function_options = ""
     for sol in cfg.opt_solutions:
         function_options+=f"Option for {sol.function_name} -  area: {sol.area}, latency: {sol.latency}, throughput: {sol.throughput}\n"
+    
+    if cfg.postfix == "":
+        postfix_message = "Use the function names as provided, indexing the options starting from 0"
+    else:
+        postfix_message = "The synthesizable function names have an extras posfix _hls. Use this name to refer to the function in the optimization process indexing the options starting from 0."
+    
     # prepare first prompt
-    initial_prompt = final_optimization_initial_prompt.format(call_graph=cfg.hierarchical_calls, 
+    initial_prompt = final_optimization_initial_prompt.format(call_graph=cfg.calls_table, postfix_message=postfix_message,
                                                               options=function_options, goal=cfg.opt_target, 
                                                               constraint=cfg.opt_constraint, target=cfg.opt_constraint_tgt)
     sys_prompt = final_optimization_system_prompt.format(goal=cfg.opt_target, constraint=cfg.opt_constraint)
-
+    print("System Prompt: ", sys_prompt)
     message_list=[
         {"role": "system", "content": sys_prompt},
         {"role": "user", "content": initial_prompt}
@@ -1039,117 +1086,187 @@ def final_optimization(cfg):
     else: 
         model_name = cfg.model
     while True:
+        if errors == 5:
+            print("Too many errors, exiting")
+            log_failed_runs(cfg)
+            exit(1)
         # prompt llm
+        print("Prompt: ", message_list[-1]["content"])
         response = call_llm(model_name, message_list, cfg)
         print( response)
         cfg.llm_runs[model_name] += 1
-        if "synthesis" in response:
-            # run synthesis
-            # parse response
-            response = response.split("synthesis: ")[1]
-            config = {}
-            with open(f"{cfg.top_function}_agent_{synt_n}.c", "w") as f:  
-                f.write(libs)
-                f.write(cfg.includes)
+        try: 
+            if "inspect:" in response:
+                response = response.split("inspect: ")[1]
+                config = {}
+                funcs = ""  
+                funcs += libs
+                funcs += cfg.includes
                 for func in response.split(","):
-                    func_name, option = func.split(" ")
+                    print("func: ", func)
+                    func_name, option = func.strip().split(" ")
                     # find the option
+                    #print("func_name: ", func_name)
+                    #print("option: ", option)
                     opt_filename = options[func_name][int(option)].filename
                     config[func_name] = int(option)
                     with open(opt_filename, "r") as opt:
-                        f.write(opt.read())
-            
-            if config not in explored_solutions:
-                # run catapult
-                tcl_file = cfg.out_folder + "agent.tcl"
-                with open(tcl_file, "w") as f:
-                    f.write(cfg.tcl.format(top_function=cfg.top_function, c_file=f"{cfg.top_function}_agent_{synt_n}.c"))
-                subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
-                cfg.hls_runs += 1
-                synt_n += 1
-            
-                # parse log
-                curr_stats_lines, hls_dir = parse_last_catapult_report()
+                        funcs += "// " + func_name + " option " +option+"\n"
+                        funcs += opt.read()
+                prompt = "The requested functions are:\n" + funcs
+                message_list.append({"role": "user", "content": prompt})
+            elif "profile:" in response:
+                # run gprof
+                # compile with 
+                print(" ".join(["clang","-ggdb", "-pg", "-g3", "-O0", "-fsanitize=address", f"tmp/{cfg.top_function}_complete.c", "-o", f"tmp/to_debug"]))
+                # compile with pg
+                p = Popen(["clang","-ggdb","-pg", "-g3", "-O0", "-fsanitize=address",f"tmp/{cfg.top_function}_complete.c", "-o", f"tmp/{cfg.top_function}_complete_profile"])
+                p.wait()
+                # run
+                p = Popen([f"./tmp/{cfg.top_function}_complete_profile"])
+                p.wait()
+                # call gprof and save log
+                with open(f"tmp/{cfg.top_function}_complete_profile.log", "w") as f:
+                    subprocess.run(["gprof", f"tmp/{cfg.top_function}_complete_profile"], stdout=f, stderr=subprocess.STDOUT)
+                # read log and build prompt
+                with open(f"tmp/{cfg.top_function}_complete_profile.log", "r") as f:
+                    log = f.read()
+                    prompt = f"The gprof log is as follows: \n{log}"
+                message_list.append({"role": "user", "content": prompt})
 
-                # store curr stats
-                curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir, config)
-                explored_solutions.append(curr_stats)
-                # print curr stats
-                print(curr_stats)
-                # prepare response prompt
-                prompt = f"""The synthesis report from last configuration is as follows: \n{curr_stats} \n"""
-            else:
-                print("Configuration already explored:")
-                curr_stats = explored_solutions[explored_solutions.index(config)]
-                print(curr_stats)
-                prompt = f"""The configuration has already been explored, the synthesis report is as follows: \n{curr_stats} \n"""
-            
-            message_list.append({"role": "user", "content": prompt})
-            
-        elif "python" in response:
-            # run python script
-            # parse script
-            script = response.split("python: '''")[1].split("'''")[0]
-            # run code in sandbox
-            with open("tmp/python_script_agent_{python_n}.py", "w") as f:
-                f.write(script)
-            with open("python_script_agent_{python_n}_output.txt", "r") as f:
-                subprocess.run(["python3.11", "tmp/python_script_agent_{python_n}.py", script], stdout=f, stderr=subprocess.STDOUT)
-            python_n += 1
-            #prepare response prompt
-            with open("python_script_agent_{python_n}_output.txt", "r") as f:
-                output = f.read()
-            prompt = f"The output of the script is: \n{output}"
-            message_list.append({"role": "user", "content": prompt})
-            
-        elif "solution" in response:
-            # accept solution
-            # parse response
-            response = response.split("solution: ")[1]
-            config = {}
-            
-            for func in response.split(","):
-                func_name, option = func.split(" ")
-                # find the option
-                config[func_name] = int(option)
-            # check if new solution or already explored
-            if config in explored_solutions:
-                return explored_solutions[explored_solutions.index(config)]
-            else:
-                # run catapult
-                with open(f"{cfg.top_function}_agent_{synt_n}.c", "w") as f:  
+            elif "synthesis:" in response:
+                # run synthesis
+                # parse response
+                synt_n += 1
+                cfg.hls_runs += 1
+                response = response.split("synthesis: ")[1]
+                config = {}
+                with open(f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                     f.write(libs)
                     f.write(cfg.includes)
-                    for func_name, idx in config.items():
-                        opt_filename = options[func_name][idx].filename
+                    for func in response.split(","):
+                        print("func: ", func)
+                        func_name, option = func.strip().split(" ")
+                        # find the option
+                        #print("func_name: ", func_name)
+                        #print("option: ", option)
+                        opt_filename = options[func_name][int(option)].filename
+                        config[func_name] = int(option)
                         with open(opt_filename, "r") as opt:
                             f.write(opt.read())
                 
-                tcl_file = cfg.out_folder + "agent.tcl"
-                with open(tcl_file, "w") as f:
-                    f.write(cfg.tcl.format(top_function=cfg.top_function, c_file=f"{cfg.top_function}_agent_{synt_n}.c"))
-                subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
-                cfg.hls_runs += 1
-                synt_n += 1
-            
-                # parse log
-                curr_stats_lines, hls_dir = parse_last_catapult_report()
+                if config not in explored_solutions:
+                   
+                    # run catapult
+                    tcl_file = cfg.out_folder + "agent.tcl"
+                    with open(tcl_file, "w") as f:
+                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
+                    subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+                    
+                    # parse log
+                    curr_stats_lines, hls_dir = parse_last_catapult_report()
+                    if curr_stats_lines == None:
+                        print("The selected congiguration failed, please try a different one")
+                        message_list.append({"role": "user", "content": "This solution failed synthesis please try a different one"})
+                        #errors += 1
+                        continue
+                    # store curr stats
+                    curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
+                    explored_solutions.append(curr_stats)
+                    # print curr stats
+                    print(curr_stats)
+                    # prepare response prompt
+                    prompt = f"""The synthesis report from last configuration is as follows: \n{curr_stats} \n"""
+                    
 
-                # store curr stats
-                curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir, config)
-                explored_solutions.append(curr_stats)
-                # print curr stats
-                print(curr_stats)
-                return curr_stats
-        else:
-            print("Invalid response, please try again")
+                else:
+                    print("Configuration already explored:")
+                    curr_stats = explored_solutions[explored_solutions.index(config)]
+                    print(curr_stats)
+                    prompt = f"""The configuration has already been explored, the synthesis report is as follows: \n{curr_stats} \n"""
+                
+                message_list.append({"role": "user", "content": prompt})
+                
+            elif "python:" in response:
+                # run python script
+                # parse script
+                python_n += 1
+                script = response.split("python: '''")[1].split("'''")[0]
+                # run code in sandbox
+                with open(f"tmp/python_script_agent_{python_n}.py", "w") as f:
+                    f.write(script)
+                with open(f"tmp/python_script_agent_{python_n}_output.txt", "w") as f:
+                    subprocess.run(["python3.11", f"tmp/python_script_agent_{python_n}.py", script], stdout=f, stderr=subprocess.STDOUT)
+                #prepare response prompt
+                with open(f"tmp/python_script_agent_{python_n}_output.txt", "r") as f:
+                    output = f.read()
+                prompt = f"The output of the script is: \n{output}"
+                message_list.append({"role": "user", "content": prompt})
+                
+            elif "solution:" in response:
+                # accept solution
+                # parse response
+                response = response.split("solution: ")[1]
+                config = {}
+                
+                for func in response.split(","):
+                    func_name, option = func.strip().split(" ")
+                    # find the option
+                    config[func_name] = int(option)
+                # check if new solution or already explored
+                if config in explored_solutions:
+                    return explored_solutions[explored_solutions.index(config)], options
+                else:
+                    # run catapult
+                    cfg.hls_runs += 1
+                    synt_n += 1
+                    with open(f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
+                        f.write(libs)
+                        f.write(cfg.includes)
+                        for func_name, idx in config.items():
+                            opt_filename = options[func_name][idx].filename
+                            with open(opt_filename, "r") as opt:
+                                f.write(opt.read())
+                    
+                    tcl_file = cfg.out_folder + "agent.tcl"
+                    with open(tcl_file, "w") as f:
+                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
+                    subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
+                    
+                    # parse log
+                    curr_stats_lines, hls_dir = parse_last_catapult_report()
+                    if curr_stats_lines == None:
+                        print("The selected congiguration failed, please try a different one")
+                        message_list.append({"role": "user", "content": "This solution failed synthesis please try a different one"})
+                        #errors += 1
+                        continue
+                    # store curr stats
+                    curr_stats = FinalOptData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
+                    explored_solutions.append(curr_stats)
+                    
+                    # print curr stats
+                    print(curr_stats)
+                    return curr_stats, options
+            else:
+                print("Invalid response, please try again")
+                message_list.append({"role": "user", "content": "Invalid response format, unrecognized option, please try again"})
+                errors += 1
+                continue
+        except Exception as e:
+            print("Error: ", e)
+            # print stacktrace
+            traceback.print_exc(file=sys.stdout)            
+            errors += 1
+            # notify llm of error
+            message_list.append({"role": "user", "content": f"There was an error: {e}, please try again"})
             continue
+        errors = 0
 
 ########################################################################################
 #                               CHARACTERIZE BENCHMARK                                 #
 ########################################################################################
 def characterize_benchmark():
-    filename = "tmp/complete.c"
+    filename = f"tmp/{cfg.top_function}_complete.c"
     with open(filename, "w") as f:
         f.write(cfg.includes)
         f.write(cfg.orig_code)
@@ -1202,7 +1319,7 @@ def characterize_benchmark():
 #                               HIERARCHICAL PROCESSING                                #
 ########################################################################################
 def hierarchical_processing(cfg):
-    filename = "tmp/complete.c"
+    filename = f"tmp/{cfg.top_function}_complete.c"
     with open(filename, "w") as f:
         f.write(cfg.includes)
         f.write(cfg.orig_code)
@@ -1228,26 +1345,37 @@ def hierarchical_processing(cfg):
         cfg.processed.append(C2HLSC(cfg))
     
     # write final file
-    with open(f"tmp/{cfg.top_function}_result.c", "w") as f:
-        # new file
+    # with open(f"tmp/{cfg.top_function}_result.c", "w") as f:
+    #     # new file
+    #     f.write(libs)
+    #     f.write(cfg.includes)
+    #     for proc in cfg.processed:
+    #         with open(f"{proc.filename}", "r") as p:
+    #             f.write(p.read())
+        
+    #     f.write(cfg.test_code)
+    
+    
+    with open(f"tmp/{cfg.benchmark_name}_{cfg.model}_cfg.pkl", "wb") as f:
+        pickle.dump(cfg, f)
+
+    solution, options = final_optimization(cfg)
+    # build final c from solutio
+    with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
         f.write(libs)
         f.write(cfg.includes)
-        for proc in cfg.processed:
-            with open(f"{proc.filename}", "r") as p:
-                f.write(p.read())
-        
+        for func_name, idx in solution.config.items():
+            opt_filename = options[func_name][idx].filename
+            with open(opt_filename, "r") as opt:
+                f.write(opt.read()) 
         f.write(cfg.test_code)
-    
-    
-    with open(f"tmp/{cfg.top_function}_cfg.pkl", "wb") as f:
-        pickle.dump(cfg, f)
-    final_optimization(cfg)
+    cfg.solution = solution
     
 ########################################################################################
 #                                    LOG RESULTS                                       #
 ########################################################################################
 def log_results(cfg):
-    
+    print("Logging results in ", f"{cfg.out_folder}{cfg.top_function}.log")
     with open(f"{cfg.out_folder}{cfg.top_function}.log", "w") as f:
         for model in models:
             if cfg.llm_runs[model] == 0:
@@ -1260,10 +1388,10 @@ def log_results(cfg):
         print(f"HLS runs: {cfg.hls_runs}", file=f)
         print(f"Compile runs: {cfg.compile_runs}", file=f)
         print("")    
-        print(cfg.processed[-1], file=f)
+        print(cfg.solution, file=f)
         
     # copy important files
-    subprocess.run(["cp", "-r", cfg.processed[-1].hls_dir, f"{cfg.out_folder}Catapult_{cfg.top_function}"])
+    subprocess.run(["cp", "-r", cfg.solution.hls_dir, f"{cfg.out_folder}Catapult_{cfg.top_function}"])
     subprocess.run(["cp", f"tmp/{cfg.top_function}_result.c", f"{cfg.out_folder}"])
 
 
@@ -1277,20 +1405,49 @@ if __name__ == "__main__":
     parser.add_argument('config', type=str, help='yaml config file with the following fields: orig_code, test_code, includes, tcl, top_function')
     # model name optional argument from a list of models
     modes = ["standard", "streaming"] # from yaml file claude-3-5-sonnet-20240620
-    parser.add_argument('--model', type=str, default="adaptive", choices=models, help='model name to use, default is adaptive')
+    parser.add_argument('--model', type=str, default="o3-mini", choices=models, help='model name to use, default is adaptive')
     opt_target = ["throughput", "latency"]
     parser.add_argument('--opt_target', type=str, default="latency", choices=opt_target, help='optimization target, default is latency, options are: throughput, latency')
     parser.add_argument('--characterize', type=bool, default=False,  help='using this option will run the benchmark characterization')
-    parser.add_argument('--opt_runs', type=int, default=3,  help='Number of optimization runs, default is 1')
-    parser.add_argument('--opt_constraint', type=str, default="area",  help='Optimization constraint, default is area')
-    parser.add_argument('--opt_constraint_tgt', type=int, default=15000,  help='Optimization constraint, default is 15000')
+    parser.add_argument('--opt_runs', type=int, default=5,  help='Number of optimization runs, default is 1')
     parser.add_argument('--from_saved', type=str, default=None,  help='pickle file to load cfg from')
 
     args = parser.parse_args()
     if args.from_saved:
         with open(args.from_saved, "rb") as f:
             cfg = pickle.load(f)
-        final_optimization(cfg)
+        cfg.model = args.model
+        cfg.out_folder = f"outputs_{cfg.top_function}"
+        idx = 1
+        while os.path.exists(cfg.out_folder+"_"+cfg.model+"_"+str(idx)):
+            idx +=1 
+        cfg.out_folder = cfg.out_folder+"_"+cfg.model+"_"+str(idx) + "/"
+        os.makedirs(cfg.out_folder)
+        # update client
+        if "claude" in cfg.model:
+            cfg.client = anthropic.Anthropic()
+        elif "deepseek" in cfg.model:
+            ds_key = os.environ.get("DEEPSEEK_API_KEY")
+            cfg.client = OpenAI(base_url="https://api.deepseek.com", api_key=ds_key)
+        else:
+            cfg.client = OpenAI()
+        with open(args.config, "r") as f:
+            config = yaml.safe_load(f)
+        if "opt_constraint" in config:
+            cfg.opt_constraint = config["opt_constraint"]
+        if "opt_constraint_tgt" in config:
+            cfg.opt_constraint_tgt = config["opt_constraint_tgt"]
+        solution, options = final_optimization(cfg)
+        # build final c from solutio
+        with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
+            f.write(libs)
+            f.write(cfg.includes)
+            for func_name, idx in solution.config.items():
+                opt_filename = options[func_name][idx].filename
+                with open(opt_filename, "r") as opt:
+                    f.write(opt.read()) 
+            f.write(cfg.test_code)
+        cfg.solution = solution
 
     else:
         cfg = CFG(args)
