@@ -12,7 +12,7 @@ import glob
 from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
 import pickle
-
+import time 
 # make dir if does not exist
 if not os.path.exists("tmp"):
     os.makedirs("tmp")
@@ -45,6 +45,7 @@ llm_api_errors = 0
 #--------------------------------------------------------------------------------------#
 class CFG:
     def __init__(self, args):
+        self.start_time = get_time_ms()
         self.model = args.model
         if self.model != "adaptive":
             self.model_name = self.model
@@ -293,6 +294,14 @@ class FinalOptData():
     
 
 ########################################################################################
+#                                     GET TIME MS                                      #
+########################################################################################
+def get_time_ms():
+    return int(time.time()*1000)
+
+
+
+########################################################################################
 #                                      CALL LLM                                        #
 ########################################################################################
 def call_llm(model, message_list, cfg):  # unified interface for calling different LLM API based on the model
@@ -332,6 +341,8 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             )
         except Exception as e:
             if "Expecting value:" in str(e) and llm_api_errors < 5:
+                print("API unavailable, retrying in a minute")
+                time.sleep(60)
                 llm_api_errors += 1
                 return call_llm(model, message_list, cfg)
             
@@ -1354,13 +1365,14 @@ def hierarchical_processing(cfg):
     #             f.write(p.read())
         
     #     f.write(cfg.test_code)
-    
-    
+
+    cfg.c2hlsc_time = get_time_ms() - cfg.start_time
     with open(f"tmp/{cfg.benchmark_name}_{cfg.model}_cfg.pkl", "wb") as f:
         pickle.dump(cfg, f)
 
     solution, options = final_optimization(cfg)
     # build final c from solutio
+    cfg.agent_time = get_time_ms() - cfg.c2hlsc_time - cfg.start_time
     with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
         f.write(libs)
         f.write(cfg.includes)
@@ -1388,6 +1400,8 @@ def log_results(cfg):
         print(f"HLS runs: {cfg.hls_runs}", file=f)
         print(f"Compile runs: {cfg.compile_runs}", file=f)
         print("")    
+        print("Time for c2hlsc: ", cfg.c2hlsc_time, file=f)
+        print("Time for agent: ", cfg.agent_time, file=f)
         print(cfg.solution, file=f)
         
     # copy important files
@@ -1437,7 +1451,9 @@ if __name__ == "__main__":
             cfg.opt_constraint = config["opt_constraint"]
         if "opt_constraint_tgt" in config:
             cfg.opt_constraint_tgt = config["opt_constraint_tgt"]
+        start_time = get_time_ms()
         solution, options = final_optimization(cfg)
+        cfg.agent_time = get_time_ms() - start_time
         # build final c from solutio
         with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
             f.write(libs)
