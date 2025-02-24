@@ -958,7 +958,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls", "_hls")
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function)
                 
 
 
