@@ -13,9 +13,7 @@ from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
 import pickle
 import time 
-# make dir if does not exist
-if not os.path.exists("tmp"):
-    os.makedirs("tmp")
+
 
 #======================================================================================#
 #                                 GLOBAL CONSTANTS                                     #
@@ -100,6 +98,10 @@ class CFG:
             self.tcl = f.read()
 
         self.top_function = config["top_function"]
+        self.tmp_folder = f"tmp_{self.top_function}/"
+        # make dir if does not exist
+        if not os.path.exists(self.tmp_folder):
+            os.makedirs(self.tmp_folder)
         self.orig_top = config["top_function"]
         # out folder
         self.out_folder = f"outputs_{self.top_function}"
@@ -420,8 +422,8 @@ def build_unit_test(func, filename, cfg):
     print("Building unit test for ", func)
 
     # compile the file with gcc
-    print(" ".join(["clang","-ggdb", "-m32", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"tmp/to_debug"]))
-    p= Popen(["clang","-ggdb", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"tmp/to_debug"])
+    print(" ".join(["clang","-ggdb", "-m32", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"{cfg.tmp_folder}to_debug"]))
+    p= Popen(["clang","-ggdb", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"{cfg.tmp_folder}to_debug"])
     p.wait()
     # get param values
     # build gdb script
@@ -430,9 +432,9 @@ def build_unit_test(func, filename, cfg):
     if cfg.params_pointers_table[func]:
         # we need to run gdb twice, first time to get the addresses and sizes of memory locations and second time to print those out
         # get addresses
-        with open("tmp/" + func + "_gdb.py", "w") as f:
+        with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
             print("import gdb", file =f)
-            print("""gdb.execute("file tmp/to_debug")""", file=f)
+            print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
             print(f"""gdb.execute("break {func}")""", file =f)
             print("""gdb.execute("run")""", file =f)
 
@@ -447,9 +449,9 @@ def build_unit_test(func, filename, cfg):
 
         #run debug 
         p = Popen(["gdb"], stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=0, text=True)
-        stdout_data, stderr_data = p.communicate(input=f"\n\nsource tmp/{func}_gdb.py\n")
+        stdout_data, stderr_data = p.communicate(input=f"\n\nsource {cfg.tmp_folder}{func}_gdb.py\n")
         
-        with open("tmp/" + func + "_gdb_fsan.log", "w") as f:
+        with open(f"{cfg.tmp_folder}" + func + "_gdb_fsan.log", "w") as f:
             dbg_out = stdout_data.replace(", \n", ",")
             dbg_out += "STDERR\n"
             dbg_out += stderr_data.replace(", \n", ",")
@@ -509,9 +511,9 @@ def build_unit_test(func, filename, cfg):
                 idx +=1
             #else: print(line)
     # get values
-    with open("tmp/" + func + "_gdb.py", "w") as f:
+    with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
         print("import gdb", file =f)
-        print("""gdb.execute("file tmp/to_debug")""", file=f)
+        print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
         print(f"""gdb.execute("break {func}")""", file =f)
         print("""gdb.execute("run")""", file =f)
         
@@ -524,9 +526,9 @@ def build_unit_test(func, filename, cfg):
         print("""gdb.execute("quit")""", file =f)
     # run debug
     p = Popen(["gdb"], stdout=PIPE, stdin=PIPE, stderr=PIPE, bufsize=0, text=True)
-    stdout_data, stderr_data = p.communicate(input=f"\n\nsource tmp/{func}_gdb.py\n")
+    stdout_data, stderr_data = p.communicate(input=f"\n\nsource {cfg.tmp_folder}{func}_gdb.py\n")
     
-    with open("tmp/" + func + "_gdb.log", "w") as f:
+    with open(f"{cfg.tmp_folder}" + func + "_gdb.log", "w") as f:
         dbg_out = stdout_data.replace(", \n", ",")
         print(dbg_out, file=f) # this is just for debugging but info form fsan is in stderr
 
@@ -624,12 +626,12 @@ def build_unit_test(func, filename, cfg):
             main_def.body.block_items.append(c_ast.FuncCall(c_ast.ID("printf"), c_ast.ExprList([c_ast.Constant(c_ast.IdentifierType(['char']), f'"%d\\n"'), c_ast.ID(cfg.params_table[func][i][1])])))
 
     generator = c_generator.CGenerator()
-    with open("tmp/" + func + ".c", "w") as f:
+    with open(f"{cfg.tmp_folder}" + func + ".c", "w") as f:
         children = []
         explore_calls(func, children, cfg)
         for child_func in children:
             print(generator.visit(cfg.nodes_table[child_func]), file=f)
-    with open("tmp/" + func + "_test.c", "w") as f:
+    with open(f"{cfg.tmp_folder}" + func + "_test.c", "w") as f:
         print(generator.visit(main_def), file=f)
 
 
@@ -768,7 +770,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
             c_code_dut = "\n".join([line for line in c_code_dut.split("\n") if not line.startswith("#include")])
 
             # new file
-            llm_file = f"tmp/{cfg.top_function}_llm.c"
+            llm_file = f"{cfg.tmp_folder}{cfg.top_function}_llm.c"
             with open(llm_file, "w") as f:
                 f.write(libs)
                 f.write(cfg.includes)
@@ -797,7 +799,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
                 continue
 
             # make file for reference output
-            orig_file = f"tmp/{cfg.top_function}_testbench.c"
+            orig_file = f"{cfg.tmp_folder}{cfg.top_function}_testbench.c"
             with open(orig_file, "w") as f:
                 f.write(cfg.includes)
                 f.write(cfg.orig_code)
@@ -864,7 +866,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
                 error = None
                 print("The code is correct")
                 # write file
-                with open(f"tmp/{cfg.top_function}{postfix}.c", "w") as f:
+                with open(f"{cfg.tmp_folder}{cfg.top_function}{postfix}.c", "w") as f:
                     # need to take out the main function
                     code= c_code_dut.split("int main()")[0]
                     f.write(code)
@@ -879,7 +881,7 @@ def C2HLSC (cfg, optimize=False):
     # write initial c
     print("model: ", cfg.model)
     postfix = "_opt" if optimize else ""
-    file_name = f"tmp/{cfg.top_function}_initial{postfix}.c"
+    file_name = f"{cfg.tmp_folder}{cfg.top_function}_initial{postfix}.c"
     with open(file_name, "w") as f:
         f.write(cfg.includes)
         f.write(cfg.orig_code)
@@ -914,7 +916,7 @@ def C2HLSC (cfg, optimize=False):
             else:
                 print(f"{cfg.top_function} is correct, does not need any changes")
                 # write final file
-                with open(f"tmp/{cfg.top_function}_to_opt.c", "w") as f:
+                with open(f"{cfg.tmp_folder}{cfg.top_function}_to_opt.c", "w") as f:
                     f.write(code_to_fix)
                 cfg.postfix = ""
                 return HLSC_optimizer(cfg, code_to_fix, cfg.top_function)
@@ -980,7 +982,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     # get baseline latency throughput and area
     # Catapult was already run in the previous step
     base_stats, hls_dir = parse_last_catapult_report()
-    base_stats= OptSolData(f"{cfg.top_function}{cfg.postfix}", base_stats, f"tmp/{cfg.top_function}_to_opt.c", hls_dir)
+    base_stats= OptSolData(f"{cfg.top_function}{cfg.postfix}", base_stats, f"{cfg.tmp_folder}{cfg.top_function}_to_opt.c", hls_dir)
     #runs.append(base_stats)
     min_area = None
     min_latency = None
@@ -1010,7 +1012,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
         curr_stats_lines, hls_dir = parse_last_catapult_report()
 
         # store curr stats
-        curr_stats = OptSolData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{n}.c", hls_dir)
+        curr_stats = OptSolData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"{cfg.tmp_folder}{cfg.top_function}_optrnd{n}.c", hls_dir)
         runs.append(curr_stats)
         # keep track of best area, latency and throughput
         if min_area == None:
@@ -1138,18 +1140,18 @@ def final_optimization(cfg):
                 cfg.agent_sequence.append(response)
                 # run gprof
                 # compile with 
-                print(" ".join(["clang","-ggdb", "-pg", "-g3", "-O0", "-fsanitize=address", f"tmp/{cfg.top_function}_complete.c", "-o", f"tmp/to_debug"]))
+                print(" ".join(["clang","-ggdb", "-pg", "-g3", "-O0", "-fsanitize=address", f"{cfg.tmp_folder}{cfg.top_function}_complete.c", "-o", f"{cfg.tmp_folder}to_debug"]))
                 # compile with pg
-                p = Popen(["clang","-ggdb","-pg", "-g3", "-O0", "-fsanitize=address",f"tmp/{cfg.top_function}_complete.c", "-o", f"tmp/{cfg.top_function}_complete_profile"])
+                p = Popen(["clang","-ggdb","-pg", "-g3", "-O0", "-fsanitize=address",f"{cfg.tmp_folder}{cfg.top_function}_complete.c", "-o", f"{cfg.tmp_folder}{cfg.top_function}_complete_profile"])
                 p.wait()
                 # run
-                p = Popen([f"./tmp/{cfg.top_function}_complete_profile"])
+                p = Popen([f"./{cfg.tmp_folder}{cfg.top_function}_complete_profile"])
                 p.wait()
                 # call gprof and save log
-                with open(f"tmp/{cfg.top_function}_complete_profile.log", "w") as f:
-                    subprocess.run(["gprof", f"tmp/{cfg.top_function}_complete_profile"], stdout=f, stderr=subprocess.STDOUT)
+                with open(f"{cfg.tmp_folder}{cfg.top_function}_complete_profile.log", "w") as f:
+                    subprocess.run(["gprof", f"{cfg.tmp_folder}{cfg.top_function}_complete_profile"], stdout=f, stderr=subprocess.STDOUT)
                 # read log and build prompt
-                with open(f"tmp/{cfg.top_function}_complete_profile.log", "r") as f:
+                with open(f"{cfg.tmp_folder}{cfg.top_function}_complete_profile.log", "r") as f:
                     log = f.read()
                     prompt = f"The gprof log is as follows: \n{log}"
                 message_list.append({"role": "user", "content": prompt})
@@ -1163,7 +1165,7 @@ def final_optimization(cfg):
                 cfg.hls_runs += 1
                 response = response.split("synthesis: ")[1]
                 config = {}
-                with open(f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
+                with open(f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                     f.write(libs)
                     f.write(cfg.includes)
                     for func in response.split(","):
@@ -1182,7 +1184,7 @@ def final_optimization(cfg):
                     # run catapult
                     tcl_file = cfg.out_folder + "agent.tcl"
                     with open(tcl_file, "w") as f:
-                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
+                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
                     subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
                     
                     # parse log
@@ -1193,7 +1195,7 @@ def final_optimization(cfg):
                         #errors += 1
                         continue
                     # store curr stats
-                    curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
+                    curr_stats = FinalOptData(f"{cfg.top_function}_hls", curr_stats_lines, f"{cfg.tmp_folder}{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
                     explored_solutions.append(curr_stats)
                     # print curr stats
                     print(curr_stats)
@@ -1217,12 +1219,12 @@ def final_optimization(cfg):
                 python_n += 1
                 script = response.split("python: '''")[1].split("'''")[0]
                 # run code in sandbox
-                with open(f"tmp/python_script_agent_{python_n}.py", "w") as f:
+                with open(f"{cfg.tmp_folder}python_script_agent_{python_n}.py", "w") as f:
                     f.write(script)
-                with open(f"tmp/python_script_agent_{python_n}_output.txt", "w") as f:
-                    subprocess.run(["python3.11", f"tmp/python_script_agent_{python_n}.py", script], stdout=f, stderr=subprocess.STDOUT)
+                with open(f"{cfg.tmp_folder}python_script_agent_{python_n}_output.txt", "w") as f:
+                    subprocess.run(["python3.11", f"{cfg.tmp_folder}python_script_agent_{python_n}.py", script], stdout=f, stderr=subprocess.STDOUT)
                 #prepare response prompt
-                with open(f"tmp/python_script_agent_{python_n}_output.txt", "r") as f:
+                with open(f"{cfg.tmp_folder}python_script_agent_{python_n}_output.txt", "r") as f:
                     output = f.read()
                 prompt = f"The output of the script is: \n{output}"
                 message_list.append({"role": "user", "content": prompt})
@@ -1246,7 +1248,7 @@ def final_optimization(cfg):
                     # run catapult
                     cfg.hls_runs += 1
                     synt_n += 1
-                    with open(f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
+                    with open(f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                         f.write(libs)
                         f.write(cfg.includes)
                         for func_name, idx in config.items():
@@ -1256,7 +1258,7 @@ def final_optimization(cfg):
                     
                     tcl_file = cfg.out_folder + "agent.tcl"
                     with open(tcl_file, "w") as f:
-                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"tmp/{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
+                        f.write(cfg.tcl.format(top_function=f"{cfg.top_function}{cfg.postfix}", c_file=f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c"))
                     subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
                     
                     # parse log
@@ -1267,7 +1269,7 @@ def final_optimization(cfg):
                         #errors += 1
                         continue
                     # store curr stats
-                    curr_stats = FinalOptData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"tmp/{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
+                    curr_stats = FinalOptData(f"{cfg.top_function}{cfg.postfix}", curr_stats_lines, f"{cfg.tmp_folder}{cfg.top_function}_optrnd{synt_n}.c", hls_dir, config)
                     explored_solutions.append(curr_stats)
                     
                     # print curr stats
@@ -1292,7 +1294,7 @@ def final_optimization(cfg):
 #                               CHARACTERIZE BENCHMARK                                 #
 ########################################################################################
 def characterize_benchmark():
-    filename = f"tmp/{cfg.top_function}_complete.c"
+    filename = f"{cfg.tmp_folder}{cfg.top_function}_complete.c"
     with open(filename, "w") as f:
         f.write(cfg.includes)
         f.write(cfg.orig_code)
@@ -1314,6 +1316,9 @@ def characterize_benchmark():
     max_operators = 0
 
     for func in cfg.hierarchical_calls:
+        generator = c_generator.CGenerator()
+        func_lines = generator.visit(cfg.nodes_table[func]).count("\n")
+        total_lines += func_lines
         if func_lines < min_lines:
             min_lines = func_lines
         if func_lines > max_lines:
@@ -1342,7 +1347,7 @@ def characterize_benchmark():
 #                               HIERARCHICAL PROCESSING                                #
 ########################################################################################
 def hierarchical_processing(cfg):
-    filename = f"tmp/{cfg.top_function}_complete.c"
+    filename = f"{cfg.tmp_folder}{cfg.top_function}_complete.c"
     with open(filename, "w") as f:
         f.write(cfg.includes)
         f.write(cfg.orig_code)
@@ -1360,15 +1365,15 @@ def hierarchical_processing(cfg):
     # print("Hierarchical calls: ", cfg.hierarchical_calls)
     for func in cfg.hierarchical_calls:
         build_unit_test(func, filename, cfg)
-        with open(f"tmp/{func}.c", "r") as f:
+        with open(f"{cfg.tmp_folder}{func}.c", "r") as f:
             cfg.orig_code = f.read()
-        with open(f"tmp/{func}_test.c", "r") as f:
+        with open(f"{cfg.tmp_folder}{func}_test.c", "r") as f:
             cfg.test_code = f.read()
         cfg.top_function = func
         cfg.processed.append(C2HLSC(cfg))
     
     # write final file
-    # with open(f"tmp/{cfg.top_function}_result.c", "w") as f:
+    # with open(f"{cfg.tmp_folder}{cfg.top_function}_result.c", "w") as f:
     #     # new file
     #     f.write(libs)
     #     f.write(cfg.includes)
@@ -1379,13 +1384,13 @@ def hierarchical_processing(cfg):
     #     f.write(cfg.test_code)
 
     cfg.c2hlsc_time = get_time_ms() - cfg.start_time
-    with open(f"tmp/{cfg.benchmark_name}_{cfg.model}_cfg.pkl", "wb") as f:
+    with open(f"{cfg.tmp_folder}{cfg.benchmark_name}_{cfg.model}_cfg.pkl", "wb") as f:
         pickle.dump(cfg, f)
 
     solution, options = final_optimization(cfg)
     # build final c from solutio
     cfg.agent_time = get_time_ms() - cfg.c2hlsc_time - cfg.start_time
-    with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
+    with open(f"{cfg.tmp_folder}{cfg.top_function}_result.c", "w") as f:  
         f.write(libs)
         f.write(cfg.includes)
         for func_name, idx in solution.config.items():
@@ -1425,7 +1430,7 @@ def log_results(cfg):
         
     # copy important files
     subprocess.run(["cp", "-r", cfg.solution.hls_dir, f"{cfg.out_folder}Catapult_{cfg.top_function}"])
-    subprocess.run(["cp", f"tmp/{cfg.top_function}_result.c", f"{cfg.out_folder}"])
+    subprocess.run(["cp", f"{cfg.tmp_folder}{cfg.top_function}_result.c", f"{cfg.out_folder}"])
 
 
 
@@ -1481,7 +1486,7 @@ if __name__ == "__main__":
         solution, options = final_optimization(cfg)
         cfg.agent_time = get_time_ms() - start_time
         # build final c from solutio
-        with open(f"tmp/{cfg.top_function}_result.c", "w") as f:  
+        with open(f"{cfg.tmp_folder}{cfg.top_function}_result.c", "w") as f:  
             f.write(libs)
             f.write(cfg.includes)
             for func_name, idx in solution.config.items():

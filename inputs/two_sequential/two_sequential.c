@@ -16,7 +16,7 @@ int even_sum(int n){
     return sum;
 }
 
-int compute(int n){
+int compute1(int n){
     int result;
     result = odd_factorial(n);
     result = even_sum(result);
