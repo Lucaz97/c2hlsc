@@ -356,7 +356,7 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             completion = cfg.client.chat.completions.create(
                 model=model,
                 messages = message_list,
-                max_tokens=130000
+                max_tokens=8192
                 #top_p=0.2,
                 #temperature=0.25
             )
