@@ -29,7 +29,7 @@ int odd_sum(int n){
 
 
 
-int compute(int n){
+int compute3(int n){
     int result0, result1, result2, result3;
     result0 = fibonacci(n);
     result1 = odd_sum(result0);

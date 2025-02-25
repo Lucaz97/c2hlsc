@@ -29,7 +29,7 @@ int even_sum(int n){
 }
 
 
-int compute(int n){
+int compute4(int n){
     int result0, result1, result2, result3;
     result0 = odd_factorial(n);
     result1 = fibonacci(n);

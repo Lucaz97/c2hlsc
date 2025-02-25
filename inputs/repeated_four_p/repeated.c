@@ -29,17 +29,13 @@ int odd_sum(int n){
 
 
 
-void compute(int n[5]){
+void compute5(int n[5]){
     int result0, result1, result2, result3;
     for(int i = 0; i < 5; i++){
         result0 = fibonacci(n[i]);
-        printf("result0 = %d\n", result0);
         result1 = odd_sum(result0);
-        printf("result1 = %d\n", result1);
         result2 = even_sum(n[i]);
-        printf("result2 = %d\n", result2);
         result3 = fibonacci(result2);
-        printf("result3 = %d\n", result3);
         n[i] = result3-result1;
     }
 }

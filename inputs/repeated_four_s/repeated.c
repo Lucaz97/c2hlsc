@@ -29,7 +29,7 @@ int even_sum(int n){
 }
 
 
-void compute(int n[5]){
+void compute6(int n[5]){
     int result0, result1, result2, result3;
     for (int i = 0; i < 5; i++){
         result0 = odd_factorial(n[i]);
