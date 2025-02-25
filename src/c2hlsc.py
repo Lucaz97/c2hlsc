@@ -19,7 +19,7 @@ import time
 #                                 GLOBAL CONSTANTS                                     #
 #======================================================================================#
 # supported models
-models = ["claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini", "deepseek-chat", "deepseek-reasoner"]
+models = ["hyperbolic-reasoner", "hyperbolic-chat","deepseek-ai/DeepSeek-R1","deepseek-ai/DeepSeek-V3","claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini", "deepseek-chat", "deepseek-reasoner"]
 # float and fixed libraries includes
 libs = """
 #include "../include/ac_float.h"
@@ -52,6 +52,19 @@ class CFG:
             self.client = anthropic.Anthropic(
             # defaults to os.environ.get("ANTHROPIC_API_KEY")
             )
+        elif "hyperbolic" in self.model:
+            if "reasoner" in self.model:
+                self.model_name = "deepseek-ai/DeepSeek-R1"
+            else:
+                self.model_name = "deepseek-ai/DeepSeek-V3"
+            hb_key = os.environ.get("HYPERBOLIC_API_KEY")
+            if hb_key is None:
+                print("hyperbolic model selected but HYPERBOLIC_API_KEY not set")
+                exit(1)
+            self.client = OpenAI(
+                api_key=hb_key,
+                base_url="https://api.hyperbolic.xyz/v1",
+                )
         elif "deepseek" in self.model:
             ds_key = os.environ.get("DEEPSEEK_API_KEY")
             if ds_key is None:
@@ -343,6 +356,7 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             completion = cfg.client.chat.completions.create(
                 model=model,
                 messages = message_list,
+                max_tokens=130000
                 #top_p=0.2,
                 #temperature=0.25
             )
@@ -359,10 +373,17 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             exit(1)
         llm_api_errors = 0
         print("LLM RAW RESPONSE: ", completion)
-        message_list.append({"role": "assistant", "content": completion.choices[0].message.content})
+        if "hyperbolic" in cfg.model and "reasoner" in cfg.model:
+            # need to filter out the thinking tokens: <think> thinking tokens <think/>
+            content = completion.choices[0].message.content
+            content = content.split("</think>")[1]
+        else:
+            content = completion.choices[0].message.content
+
+        message_list.append({"role": "assistant", "content": content})
         cfg.llm_input_tokens[model] += completion.usage.prompt_tokens
         cfg.llm_output_tokens[model] += completion.usage.completion_tokens
-        return completion.choices[0].message.content
+        return content
 
 
 
@@ -751,7 +772,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
             if cfg.model == "adaptive":
                 model_name = "gpt-4o-mini" if i+j<4 else "gpt-4o"
             else: 
-                model_name = cfg.model
+                model_name = cfg.model_name
             print("Model: ", model_name)
             
             i+=1
