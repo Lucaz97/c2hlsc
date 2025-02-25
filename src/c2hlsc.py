@@ -120,7 +120,12 @@ class CFG:
         self.llm_output_tokens = {model: 0 for model in models}
         self.hls_runs = 0
         self.compile_runs = 0
-
+        self.agent_python_calls = 0
+        self.agent_synthesis_calls = 0
+        self.agent_inspect_calls = 0
+        self.agent_profile_calls = 0
+        self.agent_solution_calls = 0
+        self.agent_sequense = []
         self.postfix="_hls"
         self.opt_target = args.opt_target
         self.opt_runs = args.opt_runs
@@ -1108,6 +1113,8 @@ def final_optimization(cfg):
         cfg.llm_runs[model_name] += 1
         try: 
             if "inspect:" in response:
+                cfg.agent_inspect_calls += 1
+                cfg.agent_sequence.append(response)
                 response = response.split("inspect: ")[1]
                 config = {}
                 funcs = ""  
@@ -1127,6 +1134,8 @@ def final_optimization(cfg):
                 prompt = "The requested functions are:\n" + funcs
                 message_list.append({"role": "user", "content": prompt})
             elif "profile:" in response:
+                cfg.agent_profile_calls += 1
+                cfg.agent_sequence.append(response)
                 # run gprof
                 # compile with 
                 print(" ".join(["clang","-ggdb", "-pg", "-g3", "-O0", "-fsanitize=address", f"tmp/{cfg.top_function}_complete.c", "-o", f"tmp/to_debug"]))
@@ -1146,6 +1155,8 @@ def final_optimization(cfg):
                 message_list.append({"role": "user", "content": prompt})
 
             elif "synthesis:" in response:
+                cfg.agent_synthesis_calls += 1
+                cfg.agent_sequence.append(response)
                 # run synthesis
                 # parse response
                 synt_n += 1
@@ -1199,6 +1210,8 @@ def final_optimization(cfg):
                 message_list.append({"role": "user", "content": prompt})
                 
             elif "python:" in response:
+                cfg.agent_python_calls += 1
+                cfg.agent_sequence.append(response)
                 # run python script
                 # parse script
                 python_n += 1
@@ -1215,6 +1228,8 @@ def final_optimization(cfg):
                 message_list.append({"role": "user", "content": prompt})
                 
             elif "solution:" in response:
+                cfg.agent_solution_calls += 1
+                cfg.agent_sequence.append(response)
                 # accept solution
                 # parse response
                 response = response.split("solution: ")[1]
@@ -1299,9 +1314,6 @@ def characterize_benchmark():
     max_operators = 0
 
     for func in cfg.hierarchical_calls:
-        generator = c_generator.CGenerator()
-        func_lines = generator.visit(cfg.nodes_table[func]).count("\n")
-        total_lines += func_lines
         if func_lines < min_lines:
             min_lines = func_lines
         if func_lines > max_lines:
@@ -1402,6 +1414,13 @@ def log_results(cfg):
         print("")    
         print("Time for c2hlsc: ", cfg.c2hlsc_time, file=f)
         print("Time for agent: ", cfg.agent_time, file=f)
+        print("Agent sequence: ", cfg.agent_sequence, file=f)
+        print("Agent synthesis calls: ", cfg.agent_synthesis_calls, file=f)
+        print("Agent python calls: ", cfg.agent_python_calls, file=f)
+        print("Agent profile calls: ", cfg.agent_profile_calls, file=f)
+        print("Agent inspect calls: ", cfg.agent_inspect_calls, file=f)
+        print("Agent solution calls: ", cfg.agent_solution_calls, file=f)
+              
         print(cfg.solution, file=f)
         
     # copy important files
