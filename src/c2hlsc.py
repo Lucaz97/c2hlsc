@@ -125,7 +125,7 @@ class CFG:
         self.agent_inspect_calls = 0
         self.agent_profile_calls = 0
         self.agent_solution_calls = 0
-        self.agent_sequense = []
+        self.agent_sequence = []
         self.postfix="_hls"
         self.opt_target = args.opt_target
         self.opt_runs = args.opt_runs
@@ -1450,6 +1450,13 @@ if __name__ == "__main__":
         with open(args.from_saved, "rb") as f:
             cfg = pickle.load(f)
         cfg.model = args.model
+        # this is just to make agent action logging back compatible
+        cfg.agent_python_calls = 0
+        cfg.agent_synthesis_calls = 0
+        cfg.agent_inspect_calls = 0
+        cfg.agent_profile_calls = 0
+        cfg.agent_solution_calls = 0
+        cfg.agent_sequence = []
         cfg.out_folder = f"outputs_{cfg.top_function}"
         idx = 1
         while os.path.exists(cfg.out_folder+"_"+cfg.model+"_"+str(idx)):
