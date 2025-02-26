@@ -1500,10 +1500,32 @@ if __name__ == "__main__":
         cfg.out_folder = cfg.out_folder+"_"+cfg.model+"_"+str(idx) + "/"
         os.makedirs(cfg.out_folder)
         # update client
+        cfg.model = args.model
+        if cfg.model != "adaptive":
+            cfg.model_name = cfg.model
         if "claude" in cfg.model:
-            cfg.client = anthropic.Anthropic()
+            cfg.model_name = cfg.model
+            cfg.client = anthropic.Anthropic(
+            # defaults to os.environ.get("ANTHROPIC_API_KEY")
+            )
+        elif "hyperbolic" in cfg.model:
+            if "reasoner" in cfg.model:
+                cfg.model_name = "deepseek-ai/DeepSeek-R1"
+            else:
+                cfg.model_name = "deepseek-ai/DeepSeek-V3"
+            hb_key = os.environ.get("HYPERBOLIC_API_KEY")
+            if hb_key is None:
+                print("hyperbolic model selected but HYPERBOLIC_API_KEY not set")
+                exit(1)
+            cfg.client = OpenAI(
+                api_key=hb_key,
+                base_url="https://api.hyperbolic.xyz/v1",
+                )
         elif "deepseek" in cfg.model:
             ds_key = os.environ.get("DEEPSEEK_API_KEY")
+            if ds_key is None:
+                print("deepseek model selected but DEEPSEEK_API_KEY not set")
+                exit(1)
             cfg.client = OpenAI(base_url="https://api.deepseek.com", api_key=ds_key)
         else:
             cfg.client = OpenAI()
