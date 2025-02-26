@@ -13,7 +13,7 @@ from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
 import pickle
 import time 
-
+import re
 
 #======================================================================================#
 #                                 GLOBAL CONSTANTS                                     #
@@ -670,7 +670,7 @@ def build_unit_test(func, filename, cfg):
 ########################################################################################
 #                                  GET SIGNATURES                                      #
 ########################################################################################
-def getSignatures(func):
+def getSignatures():
     # get all the signatures of the functions called by func
     sig_string = ""
     for proc in cfg.processed:
@@ -882,7 +882,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
                 elif "pointer" in error:
                     error += pointer_prompt
 
-                signatures = getSignatures(cfg.top_function)
+                signatures = getSignatures()
 
                 prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{c_code_dut}```\n 
                 The following child functions and includes will be provided with the following signature, assume them present in the code:
@@ -960,7 +960,7 @@ def C2HLSC (cfg, optimize=False):
         elif "pointer" in error:
             error += pointer_prompt
 
-        signatures = getSignatures(cfg.top_function)
+        signatures = getSignatures()
 
         std_prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{code_to_fix}```\n 
         The following child functions and includes will be provided with the following signature, assume them present in the code:
@@ -1020,7 +1020,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     min_throughput = None # throughput is given in cycles, so lower is better
     
     # get signatures
-    signatures = getSignatures(cfg.top_function)
+    signatures = getSignatures()
     postfix_clarification = f"Do not touch {cfg.top_function} and provide it back as is, it is used for testing purposes only." if not cfg.postfix == "" else ""
     initial_prompt = f"""Update the {cfg.top_function}{cfg.postfix} function to optimize it for HLS targetting {cfg.opt_target}.
         The function is \n```\n{code_to_optimize}\n```\n
@@ -1203,6 +1203,15 @@ def final_optimization(cfg):
                 with open(f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                     f.write(libs)
                     f.write(cfg.includes)
+                    for func in response.split(","):
+                        print("func: ", func)
+                        # add all signatures so order doesnt matter.
+                        with open(opt_filename, "r") as opt:
+                            for line in opt.readlines():
+                                pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                if re.fullmatch(pattern, line):
+                                    f.write(line.split("{")[0] + ";\n")
+                                    
                     for func in response.split(","):
                         print("func: ", func)
                         func_name, option = func.strip().split(" ")
