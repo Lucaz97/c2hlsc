@@ -353,17 +353,17 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         return message.content[0].text
     else: 
         try:
+            max_tokens = 131072 if "hyperbolic" in model else 8192
             completion = cfg.client.chat.completions.create(
                 model=model,
                 messages = message_list,
-                max_tokens=8192
+                max_tokens=max_tokens
                 #top_p=0.2,
                 #temperature=0.25
             )
         except Exception as e:
             if "Expecting value:" in str(e) and llm_api_errors < 5:
                 print("API unavailable, retrying in a minute")
-                time.sleep(60)
                 llm_api_errors += 1
                 return call_llm(model, message_list, cfg)
             
@@ -374,6 +374,11 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         llm_api_errors = 0
         print("LLM RAW RESPONSE: ", completion)
         if "hyperbolic" in cfg.model and "reasoner" in cfg.model:
+            if "<think>" not in completion.choices[0].message.content:
+                print("Too many thinking tokens .-., reasoning did not fit in the max tokens")
+                time.sleep(60)
+                llm_api_errors += 1
+                return call_llm(model, message_list, cfg)
             # need to filter out the thinking tokens: <think> thinking tokens <think/>
             content = completion.choices[0].message.content
             content = content.split("</think>")[1]
@@ -853,6 +858,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
         # create a file with the formatted tcl
         tcl_file = cfg.out_folder + "initial.tcl"
         with open(tcl_file, "w") as f:
+            print("SYNTHESIS TOP:", synthesis_top)
             f.write(cfg.tcl.format(top_function=synthesis_top, c_file=llm_file))
 
         print("Running catapult")
@@ -986,7 +992,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function)
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
                 
 
 
