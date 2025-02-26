@@ -149,7 +149,7 @@ class CFG:
         if "opt_constraint_tgt" in config:
             self.opt_constraint_tgt = config["opt_constraint_tgt"]
         self.opt_solutions= []
-        print("Optimization target: ", self.opt_target)
+        print("Optimization target: ", self.opt_target, flush=True)
 
     def __getstate__(self):
         # Create copy of object's dictionary without client
@@ -353,17 +353,18 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         return message.content[0].text
     else: 
         try:
+            max_tokens = 131072 if "hyperbolic" in model else 8192
             completion = cfg.client.chat.completions.create(
                 model=model,
                 messages = message_list,
-                max_tokens=8192
+                max_tokens=max_tokens
                 #top_p=0.2,
                 #temperature=0.25
             )
         except Exception as e:
-            if "Expecting value:" in str(e) and llm_api_errors < 5:
-                print("API unavailable, retrying in a minute")
-                time.sleep(60)
+            if "Expecting value:" in str(e) and llm_api_errors < 10:
+                print(f"API unavailable, retrying in {llm_api_errors} minute",flush=True)
+                time.sleep(60*llm_api_errors)
                 llm_api_errors += 1
                 return call_llm(model, message_list, cfg)
             
@@ -373,7 +374,12 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             exit(1)
         llm_api_errors = 0
         print("LLM RAW RESPONSE: ", completion)
-        if "hyperbolic" in cfg.model and "reasoner" in cfg.model:
+        if "hyperbolic" in cfg.model and "reasoner" in cfg.model and "<think>" in completion.choices[0].message.content:
+            # sometimes we dont get the thinking tokens with hyperbolic, not good but for now lets just get this working
+            if "</think>" not in completion.choices[0].message.content:
+                print("Too many thinking tokens .-., reasoning did not fit in the max tokens",flush=True)
+                llm_api_errors += 1
+                return call_llm(model, message_list, cfg)
             # need to filter out the thinking tokens: <think> thinking tokens <think/>
             content = completion.choices[0].message.content
             content = content.split("</think>")[1]
@@ -443,7 +449,7 @@ def build_unit_test(func, filename, cfg):
     print("Building unit test for ", func)
 
     # compile the file with gcc
-    print(" ".join(["clang","-ggdb", "-m32", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"{cfg.tmp_folder}to_debug"]))
+    print(" ".join(["clang","-ggdb", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"{cfg.tmp_folder}to_debug"]), flush=True)
     p= Popen(["clang","-ggdb", "-g3", "-O0", "-fsanitize=address",filename, "-o", f"{cfg.tmp_folder}to_debug"])
     p.wait()
     # get param values
@@ -754,7 +760,7 @@ def log_failed_runs(cfg):
 def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list should contain system prompt and first user prompt
     error = 1
     j=0
-    print("System Prompt: ", message_list[0]["content"])
+    print("System Prompt: ", message_list[0]["content"],flush=True)
     while error != None:
         # functionality check loop
         i = 0
@@ -853,9 +859,10 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
         # create a file with the formatted tcl
         tcl_file = cfg.out_folder + "initial.tcl"
         with open(tcl_file, "w") as f:
+            print("SYNTHESIS TOP:", synthesis_top)
             f.write(cfg.tcl.format(top_function=synthesis_top, c_file=llm_file))
 
-        print("Running catapult")
+        print("Running catapult",flush=True)
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
         cfg.hls_runs += 1
         j += 1
@@ -924,7 +931,7 @@ def C2HLSC (cfg, optimize=False):
 
     if cfg.mode == "standard":
         # run catapult and get the error
-        print("Running catapult")
+        print("Running catapult",flush=True)
         subprocess.run(["catapult", "-shell", "-file", tcl_file], capture_output=True)
         cfg.hls_runs += 1
 
@@ -933,9 +940,9 @@ def C2HLSC (cfg, optimize=False):
             log = f.read()
             if "# Error:" in log:
                 error = log.split("# Error:")[1]
-                print("Error: ", error)
+                print("Error: ", error, flush=True)
             else:
-                print(f"{cfg.top_function} is correct, does not need any changes")
+                print(f"{cfg.top_function} is correct, does not need any changes",flush=True)
                 # write final file
                 with open(f"{cfg.tmp_folder}{cfg.top_function}_to_opt.c", "w") as f:
                     f.write(code_to_fix)
@@ -986,7 +993,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function)
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
                 
 
 
@@ -1068,7 +1075,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     # Add all alternatives to the solutions list. 
     cfg.opt_solutions.extend(runs)
     # print stats of best
-    print(f"Best solution found: {best.hls_dir}")
+    print(f"Best solution found: {best.hls_dir}",flush=True)
     print(best)
 
     return best
@@ -1123,16 +1130,16 @@ def final_optimization(cfg):
     if cfg.model == "adaptive":
         model_name = "gpt-4o"
     else: 
-        model_name = cfg.model
+        model_name = cfg.model_name
     while True:
         if errors == 5:
             print("Too many errors, exiting")
             log_failed_runs(cfg)
             exit(1)
         # prompt llm
-        print("Prompt: ", message_list[-1]["content"])
+        print("Prompt: ", message_list[-1]["content"],flush=True)
         response = call_llm(model_name, message_list, cfg)
-        print( response)
+        print( response,flush=True)
         cfg.llm_runs[model_name] += 1
         try: 
             if "inspect:" in response:
