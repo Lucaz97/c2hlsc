@@ -1144,6 +1144,10 @@ def final_optimization(cfg):
         response = call_llm(model_name, message_list, cfg)
         print( response,flush=True)
         cfg.llm_runs[model_name] += 1
+        if "\n" in response:
+            command = response.split("\n")[0]
+            content = response
+            response = command
         try: 
             if "inspect:" in response:
                 cfg.agent_inspect_calls += 1
@@ -1248,7 +1252,7 @@ def final_optimization(cfg):
                 # run python script
                 # parse script
                 python_n += 1
-                script = response.split("python: '''")[1].split("'''")[0]
+                script = content.split("python: '''")[1].split("'''")[0]
                 # run code in sandbox
                 with open(f"{cfg.tmp_folder}python_script_agent_{python_n}.py", "w") as f:
                     f.write(script)
