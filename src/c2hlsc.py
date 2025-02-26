@@ -1123,7 +1123,7 @@ def final_optimization(cfg):
     if cfg.model == "adaptive":
         model_name = "gpt-4o"
     else: 
-        model_name = cfg.model
+        model_name = cfg.model_name
     while True:
         if errors == 5:
             print("Too many errors, exiting")
