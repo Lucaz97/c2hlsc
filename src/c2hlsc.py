@@ -853,6 +853,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
         # create a file with the formatted tcl
         tcl_file = cfg.out_folder + "initial.tcl"
         with open(tcl_file, "w") as f:
+            print("SYNTHESIS TOP:", synthesis_top)
             f.write(cfg.tcl.format(top_function=synthesis_top, c_file=llm_file))
 
         print("Running catapult")
@@ -986,7 +987,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
-    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function)
+    return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
                 
 
 
@@ -1123,7 +1124,7 @@ def final_optimization(cfg):
     if cfg.model == "adaptive":
         model_name = "gpt-4o"
     else: 
-        model_name = cfg.model
+        model_name = cfg.model_name
     while True:
         if errors == 5:
             print("Too many errors, exiting")
