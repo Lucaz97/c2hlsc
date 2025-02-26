@@ -5,7 +5,7 @@ set num_runs = 2
 set models = ( deepseek-chat ) #deepseek-reasoner )
 set benchmarks = (  kmp aes sha256 present ) # two_sequential ) # two_parallel four_sequential four_parallel repeated_four_p repeated_four_s) #
 
-set print_only = 1  # Use numeric 1/0 instead of "true"/"false"
+set print_only = 0  # Use numeric 1/0 instead of "true"/"false"
 set use_checkpoint = 1
 set nonomatch
 
