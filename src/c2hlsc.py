@@ -36,7 +36,7 @@ printf("\\n");
 }}
 """
 llm_api_errors = 0
-
+seconds_lost = 0
 
 #--------------------------------------------------------------------------------------#
 #                                     CFG CLASS                                        #
@@ -326,6 +326,7 @@ def get_time_ms():
 ########################################################################################
 def call_llm(model, message_list, cfg):  # unified interface for calling different LLM API based on the model
     global llm_api_errors
+    global seconds_lost
     if "claude" in model:
         system_content = message_list[0]["content"]
         mlist = message_list[1:]
@@ -365,6 +366,7 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             if "Expecting value:" in str(e) and llm_api_errors < 10:
                 print(f"API unavailable, retrying in {llm_api_errors} minute",flush=True)
                 time.sleep(60*llm_api_errors)
+                seconds_lost += 60*llm_api_errors
                 llm_api_errors += 1
                 return call_llm(model, message_list, cfg)
             
@@ -485,6 +487,8 @@ def build_unit_test(func, filename, cfg):
                 if isinstance(param[0], c_ast.PtrDecl) or isinstance(param[0], c_ast.ArrayDecl):
                     print(f"""gdb.execute("p (void) __asan_describe_address({param[-1]})")""", file =f)
                     ptr_type = generator.visit(param[0].type)
+                    if "[" in ptr_type:
+                        ptr_type = ptr_type.split("[")[0]
                     print(f"""gdb.execute('printf "sizeof {param[-1]} %d\\\\n", sizeof({ptr_type})')""", file =f)
                     pointers_table[param[-1]] = PointerData()
             print("""gdb.execute("quit")""", file =f)
@@ -538,6 +542,9 @@ def build_unit_test(func, filename, cfg):
                 base = int(line.split("Address ")[1].split(" is")[0], 16)
             elif "Memory access" in line: 
                 # print(line)
+                # print(idx)
+                # print(keys_list)
+                # print(pointers_table[keys_list[idx]].type_size)
                 # [32, 112) 'array3' (line 19) <== Memory access at offset 72 is inside this variable
                 # base is taken from elif above
                 # offset is given from frame pointer, have to shift it to our base
@@ -1157,7 +1164,10 @@ def final_optimization(cfg):
         print( response,flush=True)
         cfg.llm_runs[model_name] += 1
         if "\n" in response:
-            command = response.split("\n")[0]
+            for line in response.split("\n"):
+                if "inspect:" in line or "profile:" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
+                    command = line
+                    break
             content = response
             response = command
         try: 
@@ -1218,6 +1228,7 @@ def final_optimization(cfg):
                     for func in response.split(","):
                         print("func: ", func)
                         # add all signatures so order doesnt matter.
+                        func_name, option = func.strip().split(" ")
                         opt_filename = options[func_name][int(option)].filename
                         with open(opt_filename, "r") as opt:
                             for line in opt.readlines():
@@ -1308,8 +1319,24 @@ def final_optimization(cfg):
                     with open(f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                         f.write(libs)
                         f.write(cfg.includes)
-                        for func_name, idx in config.items():
-                            opt_filename = options[func_name][idx].filename
+                        for func in response.split(","):
+                            print("func: ", func)
+                            # add all signatures so order doesnt matter.
+                            opt_filename = options[func_name][int(option)].filename
+                            with open(opt_filename, "r") as opt:
+                                for line in opt.readlines():
+                                    pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                    if re.fullmatch(pattern, line):
+                                        f.write(line.split("{")[0] + ";\n")
+                                        
+                        for func in response.split(","):
+                            print("func: ", func)
+                            func_name, option = func.strip().split(" ")
+                            # find the option
+                            #print("func_name: ", func_name)
+                            #print("option: ", option)
+                            opt_filename = options[func_name][int(option)].filename
+                            config[func_name] = int(option)
                             with open(opt_filename, "r") as opt:
                                 f.write(opt.read())
                     
@@ -1461,6 +1488,7 @@ def hierarchical_processing(cfg):
 #                                    LOG RESULTS                                       #
 ########################################################################################
 def log_results(cfg):
+    global seconds_lost
     print("Logging results in ", f"{cfg.out_folder}{cfg.top_function}.log")
     with open(f"{cfg.out_folder}{cfg.top_function}.log", "w") as f:
         for model in models:
@@ -1482,7 +1510,7 @@ def log_results(cfg):
         print("Agent profile calls: ", cfg.agent_profile_calls, file=f)
         print("Agent inspect calls: ", cfg.agent_inspect_calls, file=f)
         print("Agent solution calls: ", cfg.agent_solution_calls, file=f)
-              
+        print("Seconds lost due to API down: ", seconds_lost, file=f)
         print(cfg.solution, file=f)
         
     # copy important files
