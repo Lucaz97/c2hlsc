@@ -3,7 +3,7 @@
 # ["claude-3-5-sonnet-20240620",, "claude-3-5-haiku-20241022","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini", "deepseek-chat", "deepseek-reasoner"]
 set num_runs = 2
 set models = ( hyperbolic-reasoner ) #deepseek-reasoner )
-set benchmarks = (  kmp aes sha256 present ) # two_sequential ) # two_parallel four_sequential four_parallel repeated_four_p repeated_four_s) #
+set benchmarks = (  sha256 present aes kmp ) #  two_sequential ) # two_parallel four_sequential four_parallel repeated_four_p repeated_four_s) #
 
 set print_only = 0  # Use numeric 1/0 instead of "true"/"false"
 set use_checkpoint = 1

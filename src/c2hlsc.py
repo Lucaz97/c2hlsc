@@ -13,7 +13,7 @@ from pycparser import c_ast, parse_file, c_generator, c_parser
 from subprocess import Popen, PIPE, STDOUT
 import pickle
 import time 
-
+import re
 
 #======================================================================================#
 #                                 GLOBAL CONSTANTS                                     #
@@ -421,6 +421,12 @@ def fix_repeat(string):
         return string
     item_to_fix = ""
     fixed = ""
+    if "," not in string:
+        # string is {0x0 <repeats 64 times>}
+        to_expand = string[1:].split(" ")[0]+ " ,"
+        expanded = to_expand * int(string.split("repeats")[1].split("times>")[0])
+        fixed = "[" + expanded[:-1] + "]" # remove last comma
+        return fixed
     for element in string.split(","):
         if "repeats" in element:
             item_to_fix = element
@@ -438,9 +444,15 @@ def fix_repeat(string):
     else:
         fixed = fixed[:-1]
         to_expand = item_to_fix.split("<repeats")[0] + ","
+        if "[" in to_expand: # this is the first element
+            to_expand = to_expand[1:]
+            append ="["
+        else:
+            append = ""
         times = int(item_to_fix.split("repeats")[1].split("times>")[0])
         expanded = to_expand * times
         fixed = fixed.format(expanded=expanded)
+        fixed = append + fixed
     # print(fixed.format(expanded=expanded))
     return fixed
 
@@ -670,7 +682,7 @@ def build_unit_test(func, filename, cfg):
 ########################################################################################
 #                                  GET SIGNATURES                                      #
 ########################################################################################
-def getSignatures(func):
+def getSignatures():
     # get all the signatures of the functions called by func
     sig_string = ""
     for proc in cfg.processed:
@@ -882,7 +894,7 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
                 elif "pointer" in error:
                     error += pointer_prompt
 
-                signatures = getSignatures(cfg.top_function)
+                signatures = getSignatures()
 
                 prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{c_code_dut}```\n 
                 The following child functions and includes will be provided with the following signature, assume them present in the code:
@@ -960,7 +972,7 @@ def C2HLSC (cfg, optimize=False):
         elif "pointer" in error:
             error += pointer_prompt
 
-        signatures = getSignatures(cfg.top_function)
+        signatures = getSignatures()
 
         std_prompt = f"""Help me rewrite the {cfg.top_function} function to be compatible with HLS, name the new function {cfg.top_function}_hls: \n```\n{code_to_fix}```\n 
         The following child functions and includes will be provided with the following signature, assume them present in the code:
@@ -1020,7 +1032,7 @@ def HLSC_optimizer (cfg, code_to_optimize, synthesis_top):
     min_throughput = None # throughput is given in cycles, so lower is better
     
     # get signatures
-    signatures = getSignatures(cfg.top_function)
+    signatures = getSignatures()
     postfix_clarification = f"Do not touch {cfg.top_function} and provide it back as is, it is used for testing purposes only." if not cfg.postfix == "" else ""
     initial_prompt = f"""Update the {cfg.top_function}{cfg.postfix} function to optimize it for HLS targetting {cfg.opt_target}.
         The function is \n```\n{code_to_optimize}\n```\n
@@ -1144,6 +1156,10 @@ def final_optimization(cfg):
         response = call_llm(model_name, message_list, cfg)
         print( response,flush=True)
         cfg.llm_runs[model_name] += 1
+        if "\n" in response:
+            command = response.split("\n")[0]
+            content = response
+            response = command
         try: 
             if "inspect:" in response:
                 cfg.agent_inspect_calls += 1
@@ -1201,6 +1217,16 @@ def final_optimization(cfg):
                     f.write(cfg.includes)
                     for func in response.split(","):
                         print("func: ", func)
+                        # add all signatures so order doesnt matter.
+                        opt_filename = options[func_name][int(option)].filename
+                        with open(opt_filename, "r") as opt:
+                            for line in opt.readlines():
+                                pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                if re.fullmatch(pattern, line):
+                                    f.write(line.split("{")[0] + ";\n")
+                                    
+                    for func in response.split(","):
+                        print("func: ", func)
                         func_name, option = func.strip().split(" ")
                         # find the option
                         #print("func_name: ", func_name)
@@ -1248,7 +1274,7 @@ def final_optimization(cfg):
                 # run python script
                 # parse script
                 python_n += 1
-                script = response.split("python: '''")[1].split("'''")[0]
+                script = content.split("python: '''")[1].split("'''")[0]
                 # run code in sandbox
                 with open(f"{cfg.tmp_folder}python_script_agent_{python_n}.py", "w") as f:
                     f.write(script)
