@@ -485,6 +485,8 @@ def build_unit_test(func, filename, cfg):
                 if isinstance(param[0], c_ast.PtrDecl) or isinstance(param[0], c_ast.ArrayDecl):
                     print(f"""gdb.execute("p (void) __asan_describe_address({param[-1]})")""", file =f)
                     ptr_type = generator.visit(param[0].type)
+                    if "[" in ptr_type:
+                        ptr_type = ptr_type.split("[")[0]
                     print(f"""gdb.execute('printf "sizeof {param[-1]} %d\\\\n", sizeof({ptr_type})')""", file =f)
                     pointers_table[param[-1]] = PointerData()
             print("""gdb.execute("quit")""", file =f)
@@ -538,6 +540,9 @@ def build_unit_test(func, filename, cfg):
                 base = int(line.split("Address ")[1].split(" is")[0], 16)
             elif "Memory access" in line: 
                 # print(line)
+                # print(idx)
+                # print(keys_list)
+                # print(pointers_table[keys_list[idx]].type_size)
                 # [32, 112) 'array3' (line 19) <== Memory access at offset 72 is inside this variable
                 # base is taken from elif above
                 # offset is given from frame pointer, have to shift it to our base
