@@ -36,7 +36,7 @@ printf("\\n");
 }}
 """
 llm_api_errors = 0
-
+seconds_lost = 0
 
 #--------------------------------------------------------------------------------------#
 #                                     CFG CLASS                                        #
@@ -326,6 +326,7 @@ def get_time_ms():
 ########################################################################################
 def call_llm(model, message_list, cfg):  # unified interface for calling different LLM API based on the model
     global llm_api_errors
+    global seconds_lost
     if "claude" in model:
         system_content = message_list[0]["content"]
         mlist = message_list[1:]
@@ -365,6 +366,7 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
             if "Expecting value:" in str(e) and llm_api_errors < 10:
                 print(f"API unavailable, retrying in {llm_api_errors} minute",flush=True)
                 time.sleep(60*llm_api_errors)
+                seconds_lost += 60*llm_api_errors
                 llm_api_errors += 1
                 return call_llm(model, message_list, cfg)
             
@@ -1486,6 +1488,7 @@ def hierarchical_processing(cfg):
 #                                    LOG RESULTS                                       #
 ########################################################################################
 def log_results(cfg):
+    global seconds_lost
     print("Logging results in ", f"{cfg.out_folder}{cfg.top_function}.log")
     with open(f"{cfg.out_folder}{cfg.top_function}.log", "w") as f:
         for model in models:
@@ -1507,7 +1510,7 @@ def log_results(cfg):
         print("Agent profile calls: ", cfg.agent_profile_calls, file=f)
         print("Agent inspect calls: ", cfg.agent_inspect_calls, file=f)
         print("Agent solution calls: ", cfg.agent_solution_calls, file=f)
-              
+        print("Seconds lost due to API down: ", seconds_lost, file=f)
         print(cfg.solution, file=f)
         
     # copy important files
