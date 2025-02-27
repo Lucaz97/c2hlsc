@@ -1308,8 +1308,24 @@ def final_optimization(cfg):
                     with open(f"{cfg.tmp_folder}{cfg.top_function}_{cfg.model}_agent_{synt_n}.c", "w") as f:  
                         f.write(libs)
                         f.write(cfg.includes)
-                        for func_name, idx in config.items():
-                            opt_filename = options[func_name][idx].filename
+                        for func in response.split(","):
+                            print("func: ", func)
+                            # add all signatures so order doesnt matter.
+                            opt_filename = options[func_name][int(option)].filename
+                            with open(opt_filename, "r") as opt:
+                                for line in opt.readlines():
+                                    pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                    if re.fullmatch(pattern, line):
+                                        f.write(line.split("{")[0] + ";\n")
+                                        
+                        for func in response.split(","):
+                            print("func: ", func)
+                            func_name, option = func.strip().split(" ")
+                            # find the option
+                            #print("func_name: ", func_name)
+                            #print("option: ", option)
+                            opt_filename = options[func_name][int(option)].filename
+                            config[func_name] = int(option)
                             with open(opt_filename, "r") as opt:
                                 f.write(opt.read())
                     
