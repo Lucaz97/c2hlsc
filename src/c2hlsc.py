@@ -1162,7 +1162,10 @@ def final_optimization(cfg):
         print( response,flush=True)
         cfg.llm_runs[model_name] += 1
         if "\n" in response:
-            command = response.split("\n")[0]
+            for line in response.split("\n"):
+                if "inspect:" in line or "profile:" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
+                    command = line
+                    break
             content = response
             response = command
         try: 
