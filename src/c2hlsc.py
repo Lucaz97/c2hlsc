@@ -421,6 +421,12 @@ def fix_repeat(string):
         return string
     item_to_fix = ""
     fixed = ""
+    if "," not in string:
+        # string is {0x0 <repeats 64 times>}
+        to_expand = string[1:].split(" ")[0]+ " ,"
+        expanded = to_expand * int(string.split("repeats")[1].split("times>")[0])
+        fixed = "[" + expanded[:-1] + "]" # remove last comma
+        return fixed
     for element in string.split(","):
         if "repeats" in element:
             item_to_fix = element
@@ -438,9 +444,15 @@ def fix_repeat(string):
     else:
         fixed = fixed[:-1]
         to_expand = item_to_fix.split("<repeats")[0] + ","
+        if "[" in to_expand: # this is the first element
+            to_expand = to_expand[1:]
+            append ="["
+        else:
+            append = ""
         times = int(item_to_fix.split("repeats")[1].split("times>")[0])
         expanded = to_expand * times
         fixed = fixed.format(expanded=expanded)
+        fixed = append + fixed
     # print(fixed.format(expanded=expanded))
     return fixed
 
