@@ -1232,9 +1232,9 @@ def final_optimization(cfg):
                         opt_filename = options[func_name][int(option)].filename
                         with open(opt_filename, "r") as opt:
                             for line in opt.readlines():
-                                pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                pattern = r'^.*\s*\([^);]*\)(?:\s*\{\s*(//.*)?)?\n$'       
                                 if re.fullmatch(pattern, line):
-                                    f.write(line.split("{")[0] + ";\n")
+                                    f.write(line.split("{")[0][:-1] + ";\n")
                                     
                     for func in response.split(","):
                         print("func: ", func)
