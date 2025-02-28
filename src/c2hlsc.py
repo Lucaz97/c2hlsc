@@ -1322,6 +1322,7 @@ def final_optimization(cfg):
                         for func in response.split(","):
                             print("func: ", func)
                             # add all signatures so order doesnt matter.
+                            func_name, option = func.strip().split(" ")
                             opt_filename = options[func_name][int(option)].filename
                             with open(opt_filename, "r") as opt:
                                 for line in opt.readlines():
