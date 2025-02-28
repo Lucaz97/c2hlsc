@@ -354,14 +354,20 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         return message.content[0].text
     else: 
         try:
-            max_tokens = 131072 if "hyperbolic" in cfg.model else 8192
-            completion = cfg.client.chat.completions.create(
+            if "o3" in model:
+                completion = cfg.client.chat.completions.create(
                 model=model,
-                messages = message_list,
-                max_tokens=max_tokens
-                #top_p=0.2,
-                #temperature=0.25
+                messages = message_list
             )
+            else:
+                max_tokens = 131072 if "hyperbolic" in cfg.model else 8192
+                completion = cfg.client.chat.completions.create(
+                    model=model,
+                    messages = message_list,
+                    max_tokens=max_tokens
+                    #top_p=0.2,
+                    #temperature=0.25
+                )
         except Exception as e:
             if "Expecting value:" in str(e) and llm_api_errors < 10:
                 print(f"API unavailable, retrying in {llm_api_errors} minute",flush=True)
@@ -1232,9 +1238,9 @@ def final_optimization(cfg):
                         opt_filename = options[func_name][int(option)].filename
                         with open(opt_filename, "r") as opt:
                             for line in opt.readlines():
-                                pattern = r'^.*\s*\([^)]*\)\s*\{.*$'
+                                pattern = r'^.*\s*\([^);]*\)(?:\s*\{\s*(//.*)?)?\n$'       
                                 if re.fullmatch(pattern, line):
-                                    f.write(line.split("{")[0] + ";\n")
+                                    f.write(line.split("{")[0][:-1] + ";\n")
                                     
                     for func in response.split(","):
                         print("func: ", func)
