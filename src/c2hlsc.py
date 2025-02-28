@@ -354,14 +354,20 @@ def call_llm(model, message_list, cfg):  # unified interface for calling differe
         return message.content[0].text
     else: 
         try:
-            max_tokens = 131072 if "hyperbolic" in cfg.model else 8192
-            completion = cfg.client.chat.completions.create(
+            if "o3" in model:
+                completion = cfg.client.chat.completions.create(
                 model=model,
-                messages = message_list,
-                max_tokens=max_tokens
-                #top_p=0.2,
-                #temperature=0.25
+                messages = message_list
             )
+            else:
+                max_tokens = 131072 if "hyperbolic" in cfg.model else 8192
+                completion = cfg.client.chat.completions.create(
+                    model=model,
+                    messages = message_list,
+                    max_tokens=max_tokens
+                    #top_p=0.2,
+                    #temperature=0.25
+                )
         except Exception as e:
             if "Expecting value:" in str(e) and llm_api_errors < 10:
                 print(f"API unavailable, retrying in {llm_api_errors} minute",flush=True)
