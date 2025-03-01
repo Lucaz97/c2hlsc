@@ -57,13 +57,13 @@ class CFG:
                 self.model_name = "deepseek-ai/DeepSeek-R1"
             else:
                 self.model_name = "deepseek-ai/DeepSeek-V3"
-            hb_key = os.environ.get("HYPERBOLIC_API_KEY")
+            hb_key = os.environ.get("TOGETHER_API_KEY")
             if hb_key is None:
                 print("hyperbolic model selected but HYPERBOLIC_API_KEY not set")
                 exit(1)
             self.client = OpenAI(
                 api_key=hb_key,
-                base_url="https://api.hyperbolic.xyz/v1",
+                base_url="https://api.together.xyz/v1",
                 )
         elif "deepseek" in self.model:
             ds_key = os.environ.get("DEEPSEEK_API_KEY")
@@ -1576,13 +1576,13 @@ if __name__ == "__main__":
                 cfg.model_name = "deepseek-ai/DeepSeek-R1"
             else:
                 cfg.model_name = "deepseek-ai/DeepSeek-V3"
-            hb_key = os.environ.get("HYPERBOLIC_API_KEY")
+            hb_key = os.environ.get("TOGETHER_API_KEY")
             if hb_key is None:
                 print("hyperbolic model selected but HYPERBOLIC_API_KEY not set")
                 exit(1)
             cfg.client = OpenAI(
                 api_key=hb_key,
-                base_url="https://api.hyperbolic.xyz/v1",
+                base_url="https://api.together.xyz/v1",
                 )
         elif "deepseek" in cfg.model:
             ds_key = os.environ.get("DEEPSEEK_API_KEY")
