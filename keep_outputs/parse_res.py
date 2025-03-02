@@ -1,8 +1,6 @@
 import os
-import pprint
 
 benchmarks = ["Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
-model = "deepseek_chat"
 
 class Benchmark:
     def __init__(self, name):
