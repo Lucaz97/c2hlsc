@@ -680,8 +680,6 @@ for benchmark in benchmarks:
     o3_mini_success_rate = (benchmark_dict[benchmark].o3_mini_success / 10) * 100
     success_rates.append((deepseek_chat_success_rate, deepseek_reasoner_success_rate, o3_mini_success_rate))
 
-print(success_rates)
-
 # create the figure and axis
 fig, ax = plt.subplots(figsize=(20, 5))
 # set style
