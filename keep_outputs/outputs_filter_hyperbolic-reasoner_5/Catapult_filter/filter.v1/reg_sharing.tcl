@@ -1,0 +1,10 @@
+directive set /filter/filter:core/core/mac#2:for:i(2:0).sva REGISTER_NAME mac#2:for:i(2:0).sva
+directive set /filter/filter:core/core/mac#2:for:i(2:0).sva#1 REGISTER_NAME mac#2:for:i(2:0).sva
+directive set /filter/filter:core/core/mac#2:result.sva REGISTER_NAME mac#2:result.sva
+directive set /filter/filter:core/core/mac#2:result.sva#1 REGISTER_NAME mac#2:result.sva
+directive set /filter/filter:core/core/mac#1:for:i(2:0).sva REGISTER_NAME mac#1:for:i(2:0).sva
+directive set /filter/filter:core/core/mac#1:for:i(2:0).sva#1 REGISTER_NAME mac#1:for:i(2:0).sva
+directive set /filter/filter:core/core/mac#1:result.sva REGISTER_NAME mac#1:result.sva
+directive set /filter/filter:core/core/mac#1:result.sva#1 REGISTER_NAME mac#1:result.sva
+directive set /filter/filter:core/core/mac:for:i(2:0).sva REGISTER_NAME mac:for:i(2:0).sva
+directive set /filter/filter:core/core/mac:for:i(2:0).sva#1 REGISTER_NAME mac:for:i(2:0).sva
