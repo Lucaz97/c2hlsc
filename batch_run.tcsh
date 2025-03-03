@@ -1,9 +1,9 @@
 #! /bin/tcsh
 # aes sha256 present des ascon monobit overlapping quicksort runs block cusums
 # ["claude-3-5-sonnet-20240620",, "claude-3-5-haiku-20241022","gpt-4o-mini","gpt-4-turbo-2024-04-09", "gpt-3.5-turbo-0125", "gpt-4o", "adaptive", "o3-mini", "deepseek-chat", "deepseek-reasoner"]
-set num_runs = 5
-set models = ( hyperbolic-reasoner ) #deepseek-reasoner )
-set benchmarks = ( two_parallel four_sequential four_parallel repeated_four_p repeated_four_s two_sequential kmp aes sha256 present )
+set num_runs = 10
+set models = ( hyperbolic-reasoner deepseek-chat o3-mini) #deepseek-reasoner )
+set benchmarks = ( nw )
 
 set print_only = 0  # Use numeric 1/0 instead of "true"/"false"
 set use_checkpoint = 1
