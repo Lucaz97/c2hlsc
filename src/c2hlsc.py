@@ -976,7 +976,7 @@ def C2HLSC (cfg, optimize=False):
                     f.write(code_to_fix)
                 cfg.postfix = ""
                 return HLSC_optimizer(cfg, code_to_fix, cfg.top_function)
-               
+        cfg.postfix = "_hls"
         
         if "Floating-point"in error:
             error += floating_point_prompt
