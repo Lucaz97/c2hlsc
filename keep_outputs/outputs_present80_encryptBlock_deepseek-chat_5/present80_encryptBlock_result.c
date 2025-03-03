@@ -21,21 +21,11 @@ unsigned char sBoxInverse[16] = {
 
 void copyKey_hls(present_key_t from, present_key_t to)
 {
-  #pragma HLS ARRAY_PARTITION variable=to complete
-  #pragma HLS ARRAY_PARTITION variable=from complete
-  #pragma HLS RESOURCE variable=to core=RAM_1P_BRAM
-  #pragma HLS RESOURCE variable=from core=RAM_1P_BRAM
-
-  to[0] = from[0];
-  to[1] = from[1];
-  to[2] = from[2];
-  to[3] = from[3];
-  to[4] = from[4];
-  to[5] = from[5];
-  to[6] = from[6];
-  to[7] = from[7];
-  to[8] = from[8];
-  to[9] = from[9];
+  #pragma hls_unroll yes
+  for (int i = 0; i < 10; i++)
+  {
+    to[i] = from[i];
+  }
 }
 
 void copyKey(present_key_t *from, present_key_t *to)
@@ -45,11 +35,14 @@ void copyKey(present_key_t *from, present_key_t *to)
 
 void copyBlock_hls(block_t from, block_t to)
 {
-  #pragma hls_unroll yes
-  for (int i = 0; i < 8; i++)
-  {
-    to[i] = from[i];
-  }
+  to[0] = from[0];
+  to[1] = from[1];
+  to[2] = from[2];
+  to[3] = from[3];
+  to[4] = from[4];
+  to[5] = from[5];
+  to[6] = from[6];
+  to[7] = from[7];
 }
 
 void copyBlock(block_t *from, block_t *to)
@@ -57,34 +50,34 @@ void copyBlock(block_t *from, block_t *to)
   copyBlock_hls(*from, *to);
 }
 
-void generateRoundKeys80_hls(present_key_t suppliedKey, keys_t keys) {
+void generateRoundKeys80_hls(present_key_t suppliedKey, keys_t keys)
+{
   present_key_t key;
   present_key_t newKey;
   unsigned char i;
   unsigned char j;
 
-  // Inline copyKey_hls
+  // Inlined copyKey_hls
   for (j = 0; j < 10; j++) {
-    #pragma HLS UNROLL
     key[j] = suppliedKey[j];
   }
 
-  // Inline copyBlock_hls
+  // Inlined copyBlock_hls
   for (j = 0; j < 8; j++) {
-    #pragma HLS UNROLL
     keys[0][j] = key[j];
   }
 
   #pragma hls_pipeline_init_interval 1
-  for (i = 1; i < 32; i++) {
+  for (i = 1; i < 32; i++)
+  {
     #pragma hls_unroll yes
-    for (j = 0; j < 10; j++) {
+    for (j = 0; j < 10; j++)
+    {
       newKey[j] = (key[(j + 7) % 10] << 5) | (key[(j + 8) % 10] >> 3);
     }
 
-    // Inline copyKey_hls
+    // Inlined copyKey_hls
     for (j = 0; j < 10; j++) {
-      #pragma HLS UNROLL
       key[j] = newKey[j];
     }
 
@@ -92,15 +85,15 @@ void generateRoundKeys80_hls(present_key_t suppliedKey, keys_t keys) {
     key[8] ^= i << 7;
     key[7] ^= i >> 1;
 
-    // Inline copyBlock_hls
+    // Inlined copyBlock_hls
     for (j = 0; j < 8; j++) {
-      #pragma HLS UNROLL
       keys[i][j] = key[j];
     }
   }
 }
 
-void generateRoundKeys80(present_key_t *suppliedKey, keys_t *keys) {
+void generateRoundKeys80(present_key_t *suppliedKey, keys_t *keys)
+{
   generateRoundKeys80_hls(*suppliedKey, *keys);
 }
 
@@ -109,8 +102,6 @@ void addRoundKey_hls(block_t block, round_key_t roundKey)
   #pragma hls_unroll yes
   for (unsigned char i = 0; i < 8; i++)
   {
-    #pragma hls_resource core=AddSub
-    #pragma hls_bind_op block[i] xor roundKey[i]
     block[i] ^= roundKey[i];
   }
 }
@@ -155,14 +146,12 @@ void present80_encryptBlock_hls(block_t block, present_key_t key)
   unsigned char j;
   generateRoundKeys80_hls(key, roundKeys);
 
-  // Unroll the outer loop to reduce latency
   #pragma hls_unroll yes
   for (i = 0; i < (ROUNDS - 1); i++)
   {
     addRoundKey_hls(block, roundKeys[i]);
 
-    // Unroll the inner loop to reduce latency
-    #pragma hls_unroll yes
+    #pragma hls_pipeline_init_interval 1
     for (j = 0; j < PRESENT_BLOCK_SIZE_BYTES; j++)
     {
       block[j] = (sBox[block[j] >> 4] << 4) | sBox[block[j] & 0xF];
