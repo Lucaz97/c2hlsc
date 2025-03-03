@@ -1,0 +1,121 @@
+
+#include "../include/ac_float.h"
+#include "../include/ac_fixed.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#define PATTERN_SIZE 4
+#define STRING_SIZE (204)
+
+
+void CPF(char pattern[4], int kmpNext[4])
+{
+#pragma HLS array_partition variable=kmpNext complete
+#pragma HLS array_partition variable=pattern complete
+#pragma HLS latency min=3 max=3  // Force aggressive latency target
+
+  kmpNext[0] = 0;
+  int k = 0;
+  
+  // Q=1 stage
+  int k_q1 = (pattern[0] == pattern[1]) ? 1 : 0;
+  kmpNext[1] = k_q1;
+  
+  // Q=2 stage with speculative computation
+  int k_temp = k_q1;
+  if (k_temp > 0 && pattern[k_temp] != pattern[2]) 
+    k_temp = kmpNext[k_temp];
+  int k_q2 = (pattern[k_temp] == pattern[2]) ? k_temp + 1 : 0;
+  kmpNext[2] = k_q2;
+  
+  // Q=3 stage with parallel condition evaluation
+  int cond1 = (k_q2 > 0) && (pattern[k_q2] != pattern[3]);
+  int cond2 = (cond1 && (kmpNext[k_q2] > 0)) && (pattern[kmpNext[k_q2]] != pattern[3]);
+  int k_q3 = cond2 ? 0 : 
+             cond1 ? kmpNext[k_q2] : 
+             k_q2;
+  k_q3 = (pattern[k_q3] == pattern[3]) ? k_q3 + 1 : k_q3;
+  kmpNext[3] = k_q3;
+}
+
+static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
+{
+  int i;
+  int q = 0;
+  k1:
+  for (i = 0; i < 204; i++)
+  {
+    #pragma HLS pipeline II=1
+    // Fixed-depth state update for pattern matching
+    if (q > 0 && pattern[q] != input[i]) {
+        q = kmpNext[q];
+        if (q > 0 && pattern[q] != input[i]) {
+            q = kmpNext[q];
+            if (q > 0 && pattern[q] != input[i]) {
+                q = kmpNext[q];
+            }
+        }
+    }
+
+    if (pattern[q] == input[i]) q++;
+    
+    if (q >= 4) {
+      n_matches[0]++;
+      q = kmpNext[q - 1];
+    }
+  }
+}
+
+int kmp(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
+{
+  n_matches[0] = 0;
+  
+  // Force inline CPF to expose its internal loop for optimization
+  #pragma HLS INLINE
+  CPF(pattern, kmpNext); // Pattern size 4: full unroll for latency
+
+  // Force inline kmp_process and pipeline its main processing loop
+  #pragma HLS INLINE
+  #pragma HLS PIPELINE II=1 // Target throughput for long 204-iteration loop
+  kmp_process(pattern, input, kmpNext, n_matches);
+
+  return 0;
+}
+int main()
+{
+  unsigned int pattern[] = {1819047266};
+  unsigned int input[] = {1635209812, 1869116275, 1634625908, 1936941422, 1769173857, 1769234798, 1819047266, 1952542319, 1886217588, 1249469044, 1399744623, 1634887779, 1752656750, 1684105327, 1852138850, 1769365864, 1768187758, 1920300147, 1735289186, 1634038372, 1650553709, 1819047266, 1416918383, 1919972178, 1667589221, 1869837157, 1818842994, 1835100524, 1766548301, 2036690030, 1633971809, 1953461100, 1735749480, 1752462440, 1869509729, 1936028272, 1852138601, 1869116276, 1935961205, 1702261349, 1701998445, 1851877492, 1953462132, 1936552549, 1919443795, 1936420449, 1953391984, 1919248500, 1869902693, 1936287846, 1701210476};
+  unsigned int kmpNext[] = {0, 0, 0, 0};
+  unsigned int n_matches[] = {0};
+  int ret;
+  ret = kmp((char *) pattern, (char *) input, (int *) kmpNext, (int *) n_matches);
+  printf("%d\n", ret);
+  for (int _i = 0; _i < 1; _i++)
+  {
+    printf("%d ", pattern[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 51; _i++)
+  {
+    printf("%d ", input[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 4; _i++)
+  {
+    printf("%d ", kmpNext[_i]);
+  }
+
+  printf("\n");
+  for (int _i = 0; _i < 1; _i++)
+  {
+    printf("%d ", n_matches[_i]);
+  }
+
+  printf("\n");
+}
+
+
