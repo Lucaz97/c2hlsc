@@ -1401,7 +1401,7 @@ def characterize_benchmark():
     v.visit(ast)
     
     # print(cfg.calls_table)
-    explore_calls(cfg.top_function, cfg.hierarchical_calls) # inits hierarchical_calls
+    explore_calls(cfg.top_function, cfg.hierarchical_calls, cfg) # inits hierarchical_calls
 
     total_lines=0
     min_lines = 99999999

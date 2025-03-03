@@ -714,14 +714,15 @@ import numpy as np
 
 # colors for each model
 colors = ["#fdb462", "#8dd3c7", "#fb8072", "#80b1d3"]
-# hatches = ["/", "\\"]
+hatches = ["//", "\\\\", "XX"]
 
 # define number of benchmarks and width of bars
 x = np.arange(len(benchmarks))
-width = 0.2
+x = x*0.4
+width = 0.10
 
 # benchmarks = ["compute1", "compute2", "compute3", "compute4", "compute5", "compute6", "Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
-pretty_names = ["SYNTH 1", "SYNTH 2", "SYNTH 3", "SYNTH 4", "SYNTH 5", "SYNTH 6", "AES", "SHA-256", "PRESENT", "KMP", "FIR+IIR", "NW"]
+pretty_names = ["SYN 1", "SYN 2", "SYN 3", "SYN 4", "SYN 5", "SYN 6", "AES", "SHA", "PRESENT", "KMP", "FIR+IIR", "NW"]
 
 
 ##########################
@@ -742,18 +743,19 @@ fig, ax = plt.subplots(figsize=(20, 5))
 plt.style.use("seaborn-v0_8-talk")
 
 # plot bars side by side
-rects1 = ax.bar(x - width, [rate[0] for rate in success_rates], width, edgecolor="black", color= colors[0], label="DeepSeek-V3")
-rects2 = ax.bar(x, [rate[1] for rate in success_rates], width, edgecolor="black", color= colors[1], label="DeepSeek-R1")
-rects3 = ax.bar(x + width, [rate[2] for rate in success_rates], width, edgecolor="black", color= colors[2], label="o3-mini")
+rects1 = ax.bar(x - width, [rate[0] for rate in success_rates], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+rects2 = ax.bar(x, [rate[1] for rate in success_rates], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+rects3 = ax.bar(x + width, [rate[2] for rate in success_rates], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 # ax.set_yscale("log")
 
 # add labels, title, and legend
-ax.set_ylabel("Success Rate (%)", fontsize=20)
-ax.set_xlabel("Benchmarks", fontsize=20)
+ax.set_ylabel("Success Rate (%)", fontsize=30)
+ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(pretty_names, fontsize=20)
-ax.legend(fontsize=20)
+plt.yticks(fontsize=30)
+ax.set_xlim([-0.2, 4.6])
+ax.set_xticklabels(pretty_names, fontsize=25)
+ax.legend(fontsize=30, ncol=3, loc="lower center")
 plt.tight_layout()
 
 # save the plot as pdf
@@ -799,9 +801,9 @@ latency_errors = np.array(latency_errors)
 fig, ax = plt.subplots(figsize=(20, 5))
 
 # plot bars side by side
-rects4 = ax.bar(x - width, average_latencies[:, 0], width, edgecolor="black", color= colors[0], label="DeepSeek-V3")
-rects5 = ax.bar(x, average_latencies[:, 1], width, edgecolor="black", color= colors[1], label="DeepSeek-R1")
-rects6 = ax.bar(x + width, average_latencies[:, 2], width, edgecolor="black", color= colors[2], label="o3-mini")
+rects4 = ax.bar(x - width, average_latencies[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+rects5 = ax.bar(x, average_latencies[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+rects6 = ax.bar(x + width, average_latencies[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 ax.set_yscale("log")
 
 # # add error bars for latency range (min-max)
@@ -823,12 +825,13 @@ for i in range(len(x)):
                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
-ax.set_ylabel("Latency [cycles]", fontsize=20)
-ax.set_xlabel("Benchmarks", fontsize=20)
+ax.set_ylabel("Latency [cycles]", fontsize=30)
+ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(pretty_names, fontsize=20)
-ax.legend(fontsize=20)
+plt.yticks(fontsize=30)
+ax.set_xlim([-0.2, 4.6])
+ax.set_xticklabels(pretty_names, fontsize=25)
+ax.legend(fontsize=30)
 plt.tight_layout()
 
 # save the plot as pdf
@@ -887,9 +890,9 @@ area_errors = np.array(area_errors)
 fig, ax = plt.subplots(figsize=(20, 5))
 
 # plot bars side by side
-rects7 = ax.bar(x - width, average_areas[:, 0], width, edgecolor="black", color= colors[0], label="DeepSeek-V3")
-rects8 = ax.bar(x, average_areas[:, 1], width, edgecolor="black", color= colors[1], label="DeepSeek-R1")
-rects9 = ax.bar(x + width, average_areas[:, 2], width, edgecolor="black", color= colors[2], label="o3-mini")
+rects7 = ax.bar(x - width, average_areas[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+rects8 = ax.bar(x, average_areas[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+rects9 = ax.bar(x + width, average_areas[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
@@ -912,12 +915,13 @@ for i in range(len(x)):
                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
-ax.set_ylabel("Area [um2]", fontsize=20)
-ax.set_xlabel("Benchmarks", fontsize=20)
+ax.set_ylabel("Area [um2]", fontsize=30)
+ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(pretty_names, fontsize=20)
-ax.legend(fontsize=20)
+plt.yticks(fontsize=30)
+ax.set_xlim([-0.2, 4.6])
+ax.set_xticklabels(pretty_names, fontsize=25)
+#ax.legend(fontsize=30)
 plt.tight_layout()
 
 # save the plot as pdf
@@ -964,36 +968,37 @@ cost_errors = np.array(cost_errors)
 fig, ax = plt.subplots(figsize=(20, 5))
 
 # plot bars side by side
-rects10 = ax.bar(x - width, average_costs[:, 0], width, edgecolor="black", color= colors[0], label="DeepSeek-V3")
-rects11 = ax.bar(x, average_costs[:, 1], width, edgecolor="black", color= colors[1], label="DeepSeek-R1")
-rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color= colors[2], label="o3-mini")
+rects10 = ax.bar(x - width, average_costs[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+rects11 = ax.bar(x, average_costs[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 # #ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
-for i in range(len(x)):
+# for i in range(len(x)):
 
-    # deepseek-chat
-    ax.errorbar(x[i] - width, average_costs[i, 0], 
-                yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+#     # deepseek-chat
+#     ax.errorbar(x[i] - width, average_costs[i, 0], 
+#                 yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-    # deepseek-reasoner
-    ax.errorbar(x[i], average_costs[i, 1], 
-                yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+#     # deepseek-reasoner
+#     ax.errorbar(x[i], average_costs[i, 1], 
+#                 yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-    # o3-mini
-    ax.errorbar(x[i] + width, average_costs[i, 2], 
-                yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+#     # o3-mini
+#     ax.errorbar(x[i] + width, average_costs[i, 2], 
+#                 yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
-ax.set_ylabel("Cost [$]", fontsize=20)
-ax.set_xlabel("Benchmarks", fontsize=20)
+ax.set_ylabel("Cost [$]", fontsize=30)
+ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(pretty_names, fontsize=20)
-ax.legend(fontsize=20)
+ax.set_xlim([-0.2, 4.6])
+plt.yticks(fontsize=30)
+ax.set_xticklabels(pretty_names, fontsize=25)
+#ax.legend(fontsize=30)
 plt.tight_layout()
 
 # save the plot as pdf
@@ -1078,9 +1083,9 @@ average_times = np.array(average_times)
 fig, ax = plt.subplots(figsize=(20, 5))
 
 # plot bars side by side
-rects13 = ax.bar(x - width, average_times[:, 0], width, edgecolor="black", color= colors[0], label="DeepSeek-V3")
-rects14 = ax.bar(x, average_times[:, 1], width, edgecolor="black", color= colors[1], label="DeepSeek-R1")
-rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color= colors[2], label="o3-mini")
+rects13 = ax.bar(x - width, average_times[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+rects14 = ax.bar(x, average_times[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 # #ax.set_yscale("log")
 
 # add error bars for area range (min-max)
@@ -1102,12 +1107,13 @@ rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color
 #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
-ax.set_ylabel("Time [min]", fontsize=20)
-ax.set_xlabel("Benchmarks", fontsize=20)
+ax.set_ylabel("Time [min]", fontsize=30)
+ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(pretty_names, fontsize=20)
-ax.legend(fontsize=20)
+ax.set_xlim([-0.2, 4.6])
+plt.yticks(fontsize=30)
+ax.set_xticklabels(pretty_names, fontsize=25)
+#ax.legend(fontsize=30)
 plt.tight_layout()
 
 # save the plot as pdf
@@ -1120,6 +1126,7 @@ plt.savefig("average_time_comparison.pdf")
 
 model_names = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
 x = np.arange(len(model_names))
+x = x*0.4
 
 deepseek_chat_synthesis_calls = 0
 deepseek_reasoner_synthesis_calls = 0
@@ -1165,9 +1172,9 @@ actions = np.array([deepseek_chat_actions, deepseek_reasoner_actions, o3_mini_ac
 fig, ax = plt.subplots(figsize=(20, 5))
 
 # plot bars side by side
-rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], label="Synthesis")
-rects17 = ax.bar(x - width / 2, actions[:, 1], width, edgecolor="black", color= colors[1], label="Python")
-rects18 = ax.bar(x + width / 2, actions[:, 3], width, edgecolor="black", color= colors[2], label="Inspect")
+rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="Synthesis")
+rects17 = ax.bar(x - width / 2, actions[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="Python")
+rects18 = ax.bar(x + width / 2, actions[:, 3], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="Inspect")
 rects19 = ax.bar(x + 3 * width / 2, actions[:, 2], width, edgecolor="black", color= colors[3], label="Profile")
 # #ax.set_yscale("log")
 
