@@ -1,0 +1,342 @@
+System Prompt:  
+You are an HLS Optimization Agent tasked with optimizing a C application accelerated using High-Level Synthesis (HLS). 
+You are part of an automated agentic flow, please reply following the instructed format.
+Your goal is to find the best combination of function options that minimizes latency while keeping the total area as close as possible to a target value. 
+At every iteration you have three options:
+1. Synthesize a new configuration to evaluate its latency throughput and area.
+If you select this option you should replay in the following format:
+"synthesis: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>" for each function in the application.
+I will run the synthesis and provide you with the results.
+2. See one or more function options.
+If you select this option you should reply with the following format:
+"inspect: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+3. Run the a python script to solve an optimization problem using the google OR-Tools library.
+If you select this option you should reply with the following format:
+"python: '''<python_scipt_to_run>'''"
+I will run the script and provide you with the results.
+4. Run gprof on the applacation to profile the code.
+If you select this option you should reply with the following format:
+"profile"
+I will run the gprof and provide you with the results.
+5. Accept a solution and provide the final configuration.
+If you select this option you should reply with the following format:
+"solution: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+
+Only reply with one of the five options following the format provided.
+
+Prompt:  
+This is the call graph for the application at hand:
+{'CPF': [], 'kmp_process': [], 'kmp': ['CPF', 'kmp_process'], 'main': ['kmp', 'printf']}
+
+The application has the following functions with their respective options:
+Option for CPF -  area: 992.6, latency: 9.0, throughput: 12.0
+Option for CPF -  area: 992.6, latency: 9.0, throughput: 12.0
+Option for CPF -  area: 1012.8, latency: 18.0, throughput: 21.0
+Option for CPF -  area: 992.6, latency: 9.0, throughput: 12.0
+Option for CPF -  area: 1201.7, latency: 0.0, throughput: 2.0
+Option for kmp_process -  area: 1334.9, latency: 1018.0, throughput: 1022.0
+Option for kmp_process -  area: 1047.5, latency: 2242.0, throughput: 2246.0
+Option for kmp_process -  area: 1564.7, latency: 610.0, throughput: 614.0
+Option for kmp_process -  area: 1617.7, latency: 1018.0, throughput: 1022.0
+Option for kmp_process -  area: 2391.0, latency: 2243.0, throughput: 2246.0
+Option for kmp -  area: 3486.4, latency: 615.0, throughput: 616.0
+Option for kmp -  area: 3486.4, latency: 615.0, throughput: 616.0
+Option for kmp -  area: 3486.4, latency: 615.0, throughput: 616.0
+Option for kmp -  area: 3486.4, latency: 615.0, throughput: 616.0
+Option for kmp -  area: 2109.0, latency: 413.0, throughput: 415.0
+
+
+Use the function names as provided, indexing the options starting from 0
+The throughput is expressed in period, the lower the better.
+
+The values reported for a function are obtained synthesizing the function in isolation, selecting the best latency from the child functions.
+This means that the child functions are included in the function synthesis. Selecting a different option will affect the final outcome of the parent function.
+Different options use different unrolling and pipelining factors. 
+
+The goal is to minimize the latency while keeping the total area as close as possible to 10000.
+
+Provide your first request:
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5nJQphcjqRqXfRx7FBHpJ5xJNcnc', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\'import math\n\n# Data: (area, latency, throughput)\nCPF = [\n    (992.6, 9.0, 12.0),\n    (992.6, 9.0, 12.0),\n    (1012.8, 18.0, 21.0),\n    (992.6, 9.0, 12.0),\n    (1201.7, 0.0, 2.0)\n]\n\nkmp_process = [\n    (1334.9, 1018.0, 1022.0),\n    (1047.5, 2242.0, 2246.0),\n    (1564.7, 610.0, 614.0),\n    (1617.7, 1018.0, 1022.0),\n    (2391.0, 2243.0, 2246.0)\n]\n\nkmp = [\n    (3486.4, 615.0, 616.0),\n    (3486.4, 615.0, 616.0),\n    (3486.4, 615.0, 616.0),\n    (3486.4, 615.0, 616.0),\n    (2109.0, 413.0, 415.0)\n]\n\n# Target area\ntarget_area = 10000\n\nbest_config = None\nbest_latency = math.inf\nbest_area_diff = math.inf\n\n# We assume that the overall application latency is governed by the top-level "kmp" latency.\n# And that the total area is the sum of the individual areas (CPF, kmp_process, and kmp)\n# Our objective is lex: first minimize latency, then minimize |total_area - target_area|.\nfor cpf_idx, (cpf_area, cpf_lat, cpf_thr) in enumerate(CPF):\n    for kp_idx, (kp_area, kp_lat, kp_thr) in enumerate(kmp_process):\n        for k_idx, (k_area, k_lat, k_thr) in enumerate(kmp):\n            total_area = cpf_area + kp_area + k_area\n            area_diff = abs(total_area - target_area)\n            latency = k_lat  # from kmp (which already incorporates best latency from children in synthesis)\n            \n            # Lexicographic: primary objective is minimizing latency,\n            # secondary objective is minimizing area deviation.\n            if latency < best_latency or (latency == best_latency and area_diff < best_area_diff):\n                best_latency = latency\n                best_area_diff = area_diff\n                best_config = (cpf_idx, kp_idx, k_idx, total_area, latency)\n\nprint("Best configuration:")\nprint("  CPF option:", best_config[0])\nprint("  kmp_process option:", best_config[1])\nprint("  kmp option:", best_config[2])\nprint("Total area: {:.1f}, kmp latency: {:.1f}".format(best_config[3], best_config[4]))\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740720896, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=5189, prompt_tokens=994, total_tokens=6183, prompt_tokens_details={'cached_tokens': 0, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 4544, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+python: '''import math
+
+# Data: (area, latency, throughput)
+CPF = [
+    (992.6, 9.0, 12.0),
+    (992.6, 9.0, 12.0),
+    (1012.8, 18.0, 21.0),
+    (992.6, 9.0, 12.0),
+    (1201.7, 0.0, 2.0)
+]
+
+kmp_process = [
+    (1334.9, 1018.0, 1022.0),
+    (1047.5, 2242.0, 2246.0),
+    (1564.7, 610.0, 614.0),
+    (1617.7, 1018.0, 1022.0),
+    (2391.0, 2243.0, 2246.0)
+]
+
+kmp = [
+    (3486.4, 615.0, 616.0),
+    (3486.4, 615.0, 616.0),
+    (3486.4, 615.0, 616.0),
+    (3486.4, 615.0, 616.0),
+    (2109.0, 413.0, 415.0)
+]
+
+# Target area
+target_area = 10000
+
+best_config = None
+best_latency = math.inf
+best_area_diff = math.inf
+
+# We assume that the overall application latency is governed by the top-level "kmp" latency.
+# And that the total area is the sum of the individual areas (CPF, kmp_process, and kmp)
+# Our objective is lex: first minimize latency, then minimize |total_area - target_area|.
+for cpf_idx, (cpf_area, cpf_lat, cpf_thr) in enumerate(CPF):
+    for kp_idx, (kp_area, kp_lat, kp_thr) in enumerate(kmp_process):
+        for k_idx, (k_area, k_lat, k_thr) in enumerate(kmp):
+            total_area = cpf_area + kp_area + k_area
+            area_diff = abs(total_area - target_area)
+            latency = k_lat  # from kmp (which already incorporates best latency from children in synthesis)
+            
+            # Lexicographic: primary objective is minimizing latency,
+            # secondary objective is minimizing area deviation.
+            if latency < best_latency or (latency == best_latency and area_diff < best_area_diff):
+                best_latency = latency
+                best_area_diff = area_diff
+                best_config = (cpf_idx, kp_idx, k_idx, total_area, latency)
+
+print("Best configuration:")
+print("  CPF option:", best_config[0])
+print("  kmp_process option:", best_config[1])
+print("  kmp option:", best_config[2])
+print("Total area: {:.1f}, kmp latency: {:.1f}".format(best_config[3], best_config[4]))
+'''
+Prompt:  The output of the script is: 
+Best configuration:
+  CPF option: 4
+  kmp_process option: 4
+  kmp option: 4
+Total area: 5701.7, kmp latency: 413.0
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5nKPAH90t8rR25bQA7jlCRSRGjlu', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='synthesis: CPF 4, kmp_process 4, kmp 4', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740720957, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=3612, prompt_tokens=1689, total_tokens=5301, prompt_tokens_details={'cached_tokens': 1024, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 3584, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+synthesis: CPF 4, kmp_process 4, kmp 4
+func:  CPF 4
+Error:  cannot access local variable 'func_name' where it is not associated with a value
+Traceback (most recent call last):
+  File "/home/lc4976/c2hlsc_2/src/c2hlsc.py", line 1221, in final_optimization
+    opt_filename = options[func_name][int(option)].filename
+                   ^^^^^^^
+UnboundLocalError: cannot access local variable 'func_name' where it is not associated with a value
+Prompt:  There was an error: cannot access local variable 'func_name' where it is not associated with a value, please try again
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5nKsHpYAMj1lmNpgm3WlCzUZGoVi', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='inspect: CPF 4, kmp_process 4, kmp 4', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740720986, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=859, prompt_tokens=1739, total_tokens=2598, prompt_tokens_details={'cached_tokens': 1664, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 832, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+inspect: CPF 4, kmp_process 4, kmp 4
+func:  CPF 4
+func:   kmp_process 4
+func:   kmp 4
+Prompt:  The requested functions are:
+
+#include "../include/ac_float.h"
+#include "../include/ac_fixed.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#define PATTERN_SIZE 4
+#define STRING_SIZE (204)
+
+// CPF option 4
+
+void CPF(char pattern[4], int kmpNext[4])
+{
+  int k = 0;
+  kmpNext[0] = 0;
+
+  // Unroll the computation for each q. Since the pattern length is fixed,
+  // we manually replicate the loop with fully unrolled inner while logic.
+  
+  // q = 1
+  {
+    int q = 1;
+    // Fully unroll the possible iterations of the inner while loop (max 3 iterations).
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    
+    if (pattern[k] == pattern[q])
+      k++;
+    kmpNext[q] = k;
+  }
+  
+  // q = 2
+  {
+    int q = 2;
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    
+    if (pattern[k] == pattern[q])
+      k++;
+    kmpNext[q] = k;
+  }
+  
+  // q = 3
+  {
+    int q = 3;
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    if((k > 0) && (pattern[k] != pattern[q])) { k = kmpNext[q]; }
+    
+    if (pattern[k] == pattern[q])
+      k++;
+    kmpNext[q] = k;
+  }
+}
+// kmp_process option 4
+
+static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
+{
+  // Copy the small arrays into local registers to minimize memory access latency.
+  char pat0 = pattern[0];
+  char pat1 = pattern[1];
+  char pat2 = pattern[2];
+  char pat3 = pattern[3];
+
+  int kmp0 = kmpNext[0];
+  int kmp1 = kmpNext[1];
+  int kmp2 = kmpNext[2];
+  int kmp3 = kmpNext[3];
+
+  int q = 0;
+  k1:
+  for (int i = 0; i < STRING_SIZE; i++)
+  {
+    #pragma HLS pipeline init_interval=1
+
+    // Cascaded mismatches resolved through combinational conditional logic.
+    if ((q > 0) && (((q == 1) && (pat1 != input[i])) ||
+                    ((q == 2) && (pat2 != input[i])) ||
+                    ((q == 3) && (pat3 != input[i]))))
+    {
+      if (q == 1)
+      {
+        q = kmp1;
+      }
+      else if (q == 2)
+      {
+        q = kmp2;
+        if ((q > 0) && (q == 1) && (pat1 != input[i]))  // Second-level check if q drops to 1.
+        {
+          q = kmp1;
+        }
+      }
+      else // q == 3
+      {
+        q = kmp3;
+        if ((q > 0) && (q == 2) && (pat2 != input[i]))
+        {
+          q = kmp2;
+          if ((q > 0) && (q == 1) && (pat1 != input[i]))
+          {
+            q = kmp1;
+          }
+        }
+      }
+    }
+
+    // Handle match: if the current input char equals the pattern at index q.
+    // Notice that when q is 0 we compare pat0, when 1 we compare pat1, etc.
+    if (((q == 0) && (pat0 == input[i])) ||
+        ((q == 1) && (pat1 == input[i])) ||
+        ((q == 2) && (pat2 == input[i])) ||
+        ((q == 3) && (pat3 == input[i])))
+    {
+      q++;
+    }
+
+    // When we reach a full match (q>=PATTERN_SIZE), register the match and update q.
+    if (q >= PATTERN_SIZE)
+    {
+      n_matches[0]++;
+      // q is updated using the kmpNext value corresponding to PATTERN_SIZE-1.
+      q = kmp3;
+    }
+  }
+}
+// kmp option 4
+
+int kmp(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
+{
+  // For the lowest latency, bring the input data into local arrays so that
+  // subsequent operations in CPF() and kmp_process() use on-chip registers rather than external memory.
+  
+  // Local copies of the input arrays
+  char local_pattern[4];
+  char local_input[204];
+  int  local_kmpNext[4];
+  int  local_n_matches;
+  
+  // Partition the local arrays to ensure each element is stored in a register.
+  #pragma HLS array_partition variable=local_pattern complete dim=1
+  #pragma HLS array_partition variable=local_input complete dim=1
+  #pragma HLS array_partition variable=local_kmpNext complete dim=1
+
+  // Copy the pattern into local registers. Fully unrolling this tiny loop minimizes latency.
+  for (int i = 0; i < 4; i++) {
+    #pragma HLS unroll
+    local_pattern[i] = pattern[i];
+  }
+
+  // Copy the input string into a local array.
+  // We pipeline this loop with an initiation interval of 1 so that the copy finishes quickly.
+  for (int i = 0; i < 204; i++) {
+    #pragma HLS pipeline II=1
+    local_input[i] = input[i];
+  }
+
+  // Initialize the match counter locally.
+  local_n_matches = 0;
+
+  // Inline the child functions to remove call overhead and expose inner loops for further compiler optimizations.
+  #pragma HLS inline region recursive
+  CPF(local_pattern, local_kmpNext);
+  kmp_process(local_pattern, local_input, local_kmpNext, &local_n_matches);
+
+  // Copy the local result (match count) back to the output variable.
+  n_matches[0] = local_n_matches;
+
+  return 0;
+}
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5nL01ZBBoYEIRNtV4E5MndvdgOrB', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='solution: CPF 4, kmp_process 4, kmp 4', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740720994, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=1819, prompt_tokens=3277, total_tokens=5096, prompt_tokens_details={'cached_tokens': 1792, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 1792, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+solution: CPF 4, kmp_process 4, kmp 4
+func:  CPF 4
+func:   kmp_process 4
+func:   kmp 4
+func:  CPF 4
+func:   kmp_process 4
+func:   kmp 4
+Last Catapult run:  Catapult_714
+  Process       Real Operation(s) count Latency Throughput Reset Length II Comments 
+
+  ------------- ----------------------- ------- ---------- ------------ -- --------
+
+  /kmp/core                         169     413        415            0  0          
+
+  Design Total:                     169     413        415            0  0          
+
+                    Post-Scheduling  Post-DP & FSM Post-Assignment 
+
+  ----------------- --------------- -------------- ---------------
+
+  Total Area Score:   9421.3         3014.7          2183.2        
+
+  Total Reg:          1034.2  (11%)  1002.4  (33%)   1002.4  (46%) 
+
+DONE!
+Logging results in  outputs_kmp_o3-mini_3/kmp.log
+

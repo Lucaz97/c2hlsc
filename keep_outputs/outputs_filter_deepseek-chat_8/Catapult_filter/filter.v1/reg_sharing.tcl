@@ -1,0 +1,15 @@
+directive set /filter/filter:core/core/iir:feedback.sva REGISTER_NAME iir:feedback.sva
+directive set /filter/filter:core/core/iir:feedback.sva#1 REGISTER_NAME iir:feedback.sva
+directive set /filter/filter:core/core/iir:feedforward.sva REGISTER_NAME iir:feedforward.sva
+directive set /filter/filter:core/core/iir:feedforward.sva#1 REGISTER_NAME iir:feedforward.sva
+directive set /filter/filter:core/core/fir:delay_lane(4).lpi#2 REGISTER_NAME fir:delay_lane(4).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(4).lpi#2.dfm REGISTER_NAME fir:delay_lane(4).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(3).lpi#2 REGISTER_NAME fir:delay_lane(3).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(3).lpi#2.dfm REGISTER_NAME fir:delay_lane(3).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(3).sva REGISTER_NAME fir:delay_lane(3).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(2).lpi#2 REGISTER_NAME fir:delay_lane(2).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(2).lpi#2.dfm REGISTER_NAME fir:delay_lane(2).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(2).sva REGISTER_NAME fir:delay_lane(2).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(1).lpi#2 REGISTER_NAME fir:delay_lane(1).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(1).lpi#2.dfm REGISTER_NAME fir:delay_lane(1).lpi#2
+directive set /filter/filter:core/core/fir:delay_lane(1).sva REGISTER_NAME fir:delay_lane(1).lpi#2
