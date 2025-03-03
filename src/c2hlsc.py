@@ -484,6 +484,7 @@ def build_unit_test(func, filename, cfg):
         # get addresses
         with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
             print("import gdb", file =f)
+            print(f"""gdb.execute("set print elements unlimited")""", file=f)
             print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
             print(f"""gdb.execute("break {func}")""", file =f)
             print("""gdb.execute("run")""", file =f)
@@ -568,6 +569,7 @@ def build_unit_test(func, filename, cfg):
     # get values
     with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
         print("import gdb", file =f)
+        print(f"""gdb.execute("set print elements unlimited")""", file=f)
         print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
         print(f"""gdb.execute("break {func}")""", file =f)
         print("""gdb.execute("run")""", file =f)
