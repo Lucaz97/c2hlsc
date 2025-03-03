@@ -1,0 +1,195 @@
+System Prompt:  
+You are an HLS Optimization Agent tasked with optimizing a C application accelerated using High-Level Synthesis (HLS). 
+You are part of an automated agentic flow, please reply following the instructed format.
+Your goal is to find the best combination of function options that minimizes latency while keeping the total area as close as possible to a target value. 
+At every iteration you have three options:
+1. Synthesize a new configuration to evaluate its latency throughput and area.
+If you select this option you should replay in the following format:
+"synthesis: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>" for each function in the application.
+I will run the synthesis and provide you with the results.
+2. See one or more function options.
+If you select this option you should reply with the following format:
+"inspect: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+3. Run the a python script to solve an optimization problem using the google OR-Tools library.
+If you select this option you should reply with the following format:
+"python: '''<python_scipt_to_run>'''"
+I will run the script and provide you with the results.
+4. Run gprof on the applacation to profile the code.
+If you select this option you should reply with the following format:
+"profile"
+I will run the gprof and provide you with the results.
+5. Accept a solution and provide the final configuration.
+If you select this option you should reply with the following format:
+"solution: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+
+Only reply with one of the five options following the format provided.
+
+Prompt:  
+This is the call graph for the application at hand:
+{'odd_factorial': [], 'even_sum': [], 'compute2': ['odd_factorial', 'even_sum'], 'main': ['compute2', 'printf']}
+
+The application has the following functions with their respective options:
+Option for odd_factorial -  area: 3583.9, latency: 2.0, throughput: 3.0
+Option for odd_factorial -  area: 3949.1, latency: 3.0, throughput: 4.0
+Option for odd_factorial -  area: 3696.9, latency: 2.0, throughput: 3.0
+Option for odd_factorial -  area: 6227.9, latency: 2.0, throughput: 3.0
+Option for odd_factorial -  area: 3583.9, latency: 2.0, throughput: 3.0
+Option for even_sum -  area: 1349.7, latency: 2.0, throughput: 3.0
+Option for even_sum -  area: 3021.6, latency: 1.0, throughput: 2.0
+Option for even_sum -  area: 1847.2, latency: 3.0, throughput: 4.0
+Option for even_sum -  area: 1349.7, latency: 2.0, throughput: 3.0
+Option for even_sum -  area: 2923.1, latency: 3.0, throughput: 4.0
+Option for compute2 -  area: 4137.1, latency: 3.0, throughput: 4.0
+Option for compute2 -  area: 4137.1, latency: 3.0, throughput: 4.0
+Option for compute2 -  area: 4137.1, latency: 3.0, throughput: 4.0
+Option for compute2 -  area: 4137.1, latency: 3.0, throughput: 4.0
+Option for compute2 -  area: 4137.1, latency: 3.0, throughput: 4.0
+
+
+Use the function names as provided, indexing the options starting from 0
+The throughput is expressed in period, the lower the better.
+
+The values reported for a function are obtained synthesizing the function in isolation, selecting the best latency from the child functions.
+This means that the child functions are included in the function synthesis. Selecting a different option will affect the final outcome of the parent function.
+Different options use different unrolling and pipelining factors. 
+
+The goal is to minimize the latency while keeping the total area as close as possible to 4000.
+
+Provide your first request:
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5hNV5hhOYF0Gz8efvNQsoXvucmdR', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\' \nfrom ortools.sat.python import cp_model\n\n# Data for each function option\n# Options are ordered by index.\nodd_factorial_areas    = [3583.9, 3949.1, 3696.9, 6227.9, 3583.9]\nodd_factorial_latencies = [2, 3, 2, 2, 2]\n\neven_sum_areas    = [1349.7, 3021.6, 1847.2, 1349.7, 2923.1]\neven_sum_latencies = [2, 1, 3, 2, 3]\n\ncompute2_areas    = [4137.1, 4137.1, 4137.1, 4137.1, 4137.1]\ncompute2_latencies = [3, 3, 3, 3, 3]\n\n# Number of options per function\nnum_odd = len(odd_factorial_areas)\nnum_even = len(even_sum_areas)\nnum_compute2 = len(compute2_areas)\n\n# Our decision variables: each selects an option index\nmodel = cp_model.CpModel()\nodd_choice = model.NewIntVar(0, num_odd - 1, \'odd_choice\')\neven_choice = model.NewIntVar(0, num_even - 1, \'even_choice\')\ncompute_choice = model.NewIntVar(0, num_compute2 - 1, \'compute_choice\')\n\n# Since our data are floats, we scale them to integers\nscale = 1000\n\n# Create lists of scaled integers.\nodd_areas    = [int(a * scale) for a in odd_factorial_areas]\nodd_latencies = [int(l * scale) for l in odd_factorial_latencies]\neven_areas    = [int(a * scale) for a in even_sum_areas]\neven_latencies = [int(l * scale) for l in even_sum_latencies]\ncompute_areas    = [int(a * scale) for a in compute2_areas]\ncompute_latencies = [int(l * scale) for l in compute2_latencies]\n\n# Create variables for selected latency and area for each function.\nodd_latency  = model.NewIntVar(0, max(odd_latencies), \'odd_latency\')\neven_latency = model.NewIntVar(0, max(even_latencies), \'even_latency\')\ncomp_latency = model.NewIntVar(0, max(compute_latencies), \'comp_latency\')\n\nodd_area  = model.NewIntVar(0, max(odd_areas), \'odd_area\')\neven_area = model.NewIntVar(0, max(even_areas), \'even_area\')\ncomp_area = model.NewIntVar(0, max(compute_areas), \'comp_area\')\n\n# Link decision variables to the corresponding latency and area arrays.\nmodel.AddElement(odd_choice, odd_latencies, odd_latency)\nmodel.AddElement(odd_choice, odd_areas, odd_area)\n\nmodel.AddElement(even_choice, even_latencies, even_latency)\nmodel.AddElement(even_choice, even_areas, even_area)\n\nmodel.AddElement(compute_choice, compute_latencies, comp_latency)\nmodel.AddElement(compute_choice, compute_areas, comp_area)\n\n# Define overall metrics:\n# Assume overall latency is the sum of latencies (to favor lower latency in all functions).\noverall_latency = odd_latency + even_latency + comp_latency\n\n# For area, we wish to be as close as possible to a target.\n# Here, we assume target area for each function is 4000*scale, so total target:\ntarget_total = 4000 * scale * 3  # for odd_factorial, even_sum, compute2\ntotal_area = odd_area + even_area + comp_area\n\n# We minimize absolute difference from target_total.\n# To linearize absolute value, use two nonnegative variables.\narea_dev = model.NewIntVar(0, target_total, \'area_dev\')\ndiff = model.NewIntVar(-target_total, target_total, \'diff\')\nmodel.Add(diff == total_area - target_total)\nmodel.AddAbsEquality(area_dev, diff)\n\n# We form a combined objective: primary goal is low latency, secondary is area closeness.\n# Here, use a weighted sum: latency has weight 1, area_dev scaled by a small factor.\n# Since values are scaled up by 1000, latencies around 2000-3000, and area_dev in millions.\n# So choose a weight for area_dev that makes it secondary.\nw_area = 1  # area deviation weight; adjust if necessary, here 1 is used because latency differences are much smaller.\nobjective = overall_latency + w_area * area_dev\n\nmodel.Minimize(objective)\n\n# Solve the model.\nsolver = cp_model.CpSolver()\nstatus = solver.Solve(model)\n\nif status in (cp_model.OPTIMAL, cp_model.FEASIBLE):\n    print("Optimal configuration found:")\n    odd_opt = solver.Value(odd_choice)\n    even_opt = solver.Value(even_choice)\n    comp_opt = solver.Value(compute_choice)\n    print("odd_factorial option:", odd_opt)\n    print("even_sum option:", even_opt)\n    print("compute2 option:", comp_opt)\n    print("Overall latency (scaled):", solver.Value(overall_latency))\n    print("Total area (scaled):", solver.Value(total_area))\n    print("Area deviation (scaled):", solver.Value(area_dev))\nelse:\n    print("No solution found.")\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740698085, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=5580, prompt_tokens=996, total_tokens=6576, prompt_tokens_details={'cached_tokens': 0, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 4416, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+python: ''' 
+from ortools.sat.python import cp_model
+
+# Data for each function option
+# Options are ordered by index.
+odd_factorial_areas    = [3583.9, 3949.1, 3696.9, 6227.9, 3583.9]
+odd_factorial_latencies = [2, 3, 2, 2, 2]
+
+even_sum_areas    = [1349.7, 3021.6, 1847.2, 1349.7, 2923.1]
+even_sum_latencies = [2, 1, 3, 2, 3]
+
+compute2_areas    = [4137.1, 4137.1, 4137.1, 4137.1, 4137.1]
+compute2_latencies = [3, 3, 3, 3, 3]
+
+# Number of options per function
+num_odd = len(odd_factorial_areas)
+num_even = len(even_sum_areas)
+num_compute2 = len(compute2_areas)
+
+# Our decision variables: each selects an option index
+model = cp_model.CpModel()
+odd_choice = model.NewIntVar(0, num_odd - 1, 'odd_choice')
+even_choice = model.NewIntVar(0, num_even - 1, 'even_choice')
+compute_choice = model.NewIntVar(0, num_compute2 - 1, 'compute_choice')
+
+# Since our data are floats, we scale them to integers
+scale = 1000
+
+# Create lists of scaled integers.
+odd_areas    = [int(a * scale) for a in odd_factorial_areas]
+odd_latencies = [int(l * scale) for l in odd_factorial_latencies]
+even_areas    = [int(a * scale) for a in even_sum_areas]
+even_latencies = [int(l * scale) for l in even_sum_latencies]
+compute_areas    = [int(a * scale) for a in compute2_areas]
+compute_latencies = [int(l * scale) for l in compute2_latencies]
+
+# Create variables for selected latency and area for each function.
+odd_latency  = model.NewIntVar(0, max(odd_latencies), 'odd_latency')
+even_latency = model.NewIntVar(0, max(even_latencies), 'even_latency')
+comp_latency = model.NewIntVar(0, max(compute_latencies), 'comp_latency')
+
+odd_area  = model.NewIntVar(0, max(odd_areas), 'odd_area')
+even_area = model.NewIntVar(0, max(even_areas), 'even_area')
+comp_area = model.NewIntVar(0, max(compute_areas), 'comp_area')
+
+# Link decision variables to the corresponding latency and area arrays.
+model.AddElement(odd_choice, odd_latencies, odd_latency)
+model.AddElement(odd_choice, odd_areas, odd_area)
+
+model.AddElement(even_choice, even_latencies, even_latency)
+model.AddElement(even_choice, even_areas, even_area)
+
+model.AddElement(compute_choice, compute_latencies, comp_latency)
+model.AddElement(compute_choice, compute_areas, comp_area)
+
+# Define overall metrics:
+# Assume overall latency is the sum of latencies (to favor lower latency in all functions).
+overall_latency = odd_latency + even_latency + comp_latency
+
+# For area, we wish to be as close as possible to a target.
+# Here, we assume target area for each function is 4000*scale, so total target:
+target_total = 4000 * scale * 3  # for odd_factorial, even_sum, compute2
+total_area = odd_area + even_area + comp_area
+
+# We minimize absolute difference from target_total.
+# To linearize absolute value, use two nonnegative variables.
+area_dev = model.NewIntVar(0, target_total, 'area_dev')
+diff = model.NewIntVar(-target_total, target_total, 'diff')
+model.Add(diff == total_area - target_total)
+model.AddAbsEquality(area_dev, diff)
+
+# We form a combined objective: primary goal is low latency, secondary is area closeness.
+# Here, use a weighted sum: latency has weight 1, area_dev scaled by a small factor.
+# Since values are scaled up by 1000, latencies around 2000-3000, and area_dev in millions.
+# So choose a weight for area_dev that makes it secondary.
+w_area = 1  # area deviation weight; adjust if necessary, here 1 is used because latency differences are much smaller.
+objective = overall_latency + w_area * area_dev
+
+model.Minimize(objective)
+
+# Solve the model.
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+
+if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+    print("Optimal configuration found:")
+    odd_opt = solver.Value(odd_choice)
+    even_opt = solver.Value(even_choice)
+    comp_opt = solver.Value(compute_choice)
+    print("odd_factorial option:", odd_opt)
+    print("even_sum option:", even_opt)
+    print("compute2 option:", comp_opt)
+    print("Overall latency (scaled):", solver.Value(overall_latency))
+    print("Total area (scaled):", solver.Value(total_area))
+    print("Area deviation (scaled):", solver.Value(area_dev))
+else:
+    print("No solution found.")
+'''
+Prompt:  The output of the script is: 
+Optimal configuration found:
+odd_factorial option: 3
+even_sum option: 2
+compute2 option: 0
+Overall latency (scaled): 8000
+Total area (scaled): 12212200
+Area deviation (scaled): 212200
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B5hO2OcfdsKdxaBxcFCuHPQ1zAwua', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='solution: odd_factorial 3, even_sum 2, compute2 0', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740698118, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=348, prompt_tokens=2219, total_tokens=2567, prompt_tokens_details={'cached_tokens': 1024, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 320, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+solution: odd_factorial 3, even_sum 2, compute2 0
+func:  odd_factorial 3
+func:   even_sum 2
+func:   compute2 0
+func:  odd_factorial 3
+func:   even_sum 2
+func:   compute2 0
+Last Catapult run:  Catapult_48
+  Process        Real Operation(s) count Latency Throughput Reset Length II Comments 
+
+  -------------- ----------------------- ------- ---------- ------------ -- --------
+
+  /compute2/core                      34       5          6            0  0        ? 
+
+  Design Total:                       34       5          6            0  0          
+
+                    Post-Scheduling   Post-DP & FSM Post-Assignment 
+
+  ----------------- --------------- --------------- ---------------
+
+  Total Area Score:   7805.4          8437.5          7507.8        
+
+  Total Reg:          1391.7  (18%)   1219.4  (14%)   1219.4  (16%) 
+
+DONE!
+Logging results in  outputs_compute2_o3-mini_2/compute2.log
+
