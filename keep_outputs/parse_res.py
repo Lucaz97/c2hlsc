@@ -805,22 +805,22 @@ rects6 = ax.bar(x + width, average_latencies[:, 2], width, edgecolor="black", co
 ax.set_yscale("log")
 
 # # add error bars for latency range (min-max)
-# for i in range(len(x)):
+for i in range(len(x)):
 
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_latencies[i, 0], 
-#                 yerr=[[latency_errors[i, 0][0]], [latency_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # deepseek-chat
+    ax.errorbar(x[i] - width, average_latencies[i, 0], 
+                yerr=[[latency_errors[i, 0][0]], [latency_errors[i, 0][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_latencies[i, 1], 
-#                 yerr=[[latency_errors[i, 1][0]], [latency_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # deepseek-reasoner
+    ax.errorbar(x[i], average_latencies[i, 1], 
+                yerr=[[latency_errors[i, 1][0]], [latency_errors[i, 1][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_latencies[i, 2], 
-#                 yerr=[[latency_errors[i, 2][0]], [latency_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # o3-mini
+    ax.errorbar(x[i] + width, average_latencies[i, 2], 
+                yerr=[[latency_errors[i, 2][0]], [latency_errors[i, 2][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
 ax.set_ylabel("Latency [cycles]", fontsize=20)
@@ -860,9 +860,23 @@ for benchmark in benchmarks:
 
     # calculate the errors (difference between min/max and the average)
     deepseek_chat_error = [deepseek_chat_avg_area - deepseek_chat_min_area, deepseek_chat_max_area - deepseek_chat_avg_area]
-    deepseek_reasoner_error = [deepseek_reasoner_avg_area - deepseek_reasoner_min_area, deepseek_reasoner_max_area - deepseek_reasoner_avg_area]
-    o3_mini_error = [o3_mini_avg_area - o3_mini_min_area, o3_mini_max_area - o3_mini_avg_area]
+    if abs(deepseek_chat_error[0]) < 0.0000001:
+        deepseek_chat_error[0] = 0
+    if abs(deepseek_chat_error[1]) < 0.0000001:
+        deepseek_chat_error[1] = 0
 
+    deepseek_reasoner_error = [deepseek_reasoner_avg_area - deepseek_reasoner_min_area, deepseek_reasoner_max_area - deepseek_reasoner_avg_area]
+    if abs(deepseek_reasoner_error[0]) < 0.0000001:
+        deepseek_reasoner_error[0] = 0
+    if abs(deepseek_reasoner_error[1]) < 0.0000001:
+        deepseek_reasoner_error[1] = 0
+
+    o3_mini_error = [o3_mini_avg_area - o3_mini_min_area, o3_mini_max_area - o3_mini_avg_area]
+    if abs(o3_mini_error[0]) < 0.0000001:
+        o3_mini_error[0] = 0
+    if abs(o3_mini_error[1]) < 0.0000001:
+        o3_mini_error[1] = 0
+        
     # append errors
     area_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
 
@@ -879,22 +893,23 @@ rects9 = ax.bar(x + width, average_areas[:, 2], width, edgecolor="black", color=
 ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
-# for i in range(len(x)):
-
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_areas[i, 0], 
-#                 yerr=[[area_errors[i, 0][0]], [area_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+for i in range(len(x)):
+    # print([area_errors[i, 0][1]])
+    # print([area_errors[i, 0][0]])
+    # deepseek-chat
+    ax.errorbar(x[i] - width, average_areas[i, 0], 
+                yerr=[[area_errors[i, 0][0]], [area_errors[i, 0][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_areas[i, 1], 
-#                 yerr=[[area_errors[i, 1][0]], [area_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # deepseek-reasoner
+    ax.errorbar(x[i], average_areas[i, 1], 
+                yerr=[[area_errors[i, 1][0]], [area_errors[i, 1][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_areas[i, 2], 
-#                 yerr=[[area_errors[i, 2][0]], [area_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # o3-mini
+    ax.errorbar(x[i] + width, average_areas[i, 2], 
+                yerr=[[area_errors[i, 2][0]], [area_errors[i, 2][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
 ax.set_ylabel("Area [um2]", fontsize=20)
@@ -955,22 +970,22 @@ rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color
 # #ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
-# for i in range(len(x)):
+for i in range(len(x)):
 
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_costs[i, 0], 
-#                 yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # deepseek-chat
+    ax.errorbar(x[i] - width, average_costs[i, 0], 
+                yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_costs[i, 1], 
-#                 yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # deepseek-reasoner
+    ax.errorbar(x[i], average_costs[i, 1], 
+                yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_costs[i, 2], 
-#                 yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    # o3-mini
+    ax.errorbar(x[i] + width, average_costs[i, 2], 
+                yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
+                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
 ax.set_ylabel("Cost [$]", fontsize=20)
@@ -1152,8 +1167,8 @@ fig, ax = plt.subplots(figsize=(20, 5))
 # plot bars side by side
 rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], label="Synthesis")
 rects17 = ax.bar(x - width / 2, actions[:, 1], width, edgecolor="black", color= colors[1], label="Python")
-rects18 = ax.bar(x + width / 2, actions[:, 2], width, edgecolor="black", color= colors[2], label="Profile")
-rects19 = ax.bar(x + 3 * width / 2, actions[:, 3], width, edgecolor="black", color= colors[3], label="Inspect")
+rects18 = ax.bar(x + width / 2, actions[:, 3], width, edgecolor="black", color= colors[2], label="Inspect")
+rects19 = ax.bar(x + 3 * width / 2, actions[:, 2], width, edgecolor="black", color= colors[3], label="Profile")
 # #ax.set_yscale("log")
 
 # add error bars for area range (min-max)
