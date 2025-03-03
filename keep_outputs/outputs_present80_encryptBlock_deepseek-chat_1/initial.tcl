@@ -4,7 +4,7 @@ solution options set /OnTheFly/VthAttributeType cell_lib
 solution options set /Input/TargetPlatform x86_64
 solution options set /Output/OutputVHDL false
 solution options set /Output/GenerateCycleNetlist false
-solution file add tmp_present80_encryptBlock/generateRoundKeys80_initial.c -type C++
+solution file add tmp_present80_encryptBlock/present80_encryptBlock_llm.c -type C++
 directive set -DESIGN_GOAL area
 directive set -SPECULATE true
 directive set -MERGEABLE true
@@ -51,7 +51,7 @@ directive set -PROTOTYPING_ENGINE oasys
 directive set -PIPELINE_RAMP_UP true
 go new
 go analyze
-solution design set generateRoundKeys80 -top
+solution design set present80_encryptBlock_hls -top
 go compile
 solution library add nangate-45nm_beh -- -rtlsyntool DesignCompiler -vendor Nangate -technology 045nm
 solution library add ram_nangate-45nm_pipe_beh

@@ -18,18 +18,25 @@ int odd_factorial(int n)
 
 int even_sum(int n)
 {
-  if(n <= 2) return 0;
-  int m = (n-1)/2; // Equivalent to ceil((n-2)/2) for positive n
-  return m * (m + 1);
+  int sum = 0;
+  for (int i = 2; i < n; i += 2)
+  {
+#pragma HLS pipeline II=1
+    sum += i;
+  }
+  return sum;
 }
 
 int compute2(int n)
 {
   int result1;
   int result2;
+<<<<<<< HEAD
 
   // No viable loop/operation targets for HLS pragmas found in compute2 body
   // Child function optimizations would need to be applied within odd_factorial/even_sum
+=======
+>>>>>>> 65176057dc8463100481c25242ba932c42aed150
   result1 = odd_factorial(n);
   result2 = even_sum(n);
   return result1 - result2;
