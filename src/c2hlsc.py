@@ -1173,7 +1173,7 @@ def final_optimization(cfg):
         cfg.llm_runs[model_name] += 1
         if "\n" in response:
             for line in response.split("\n"):
-                if "inspect:" in line or "profile:" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
+                if "inspect:" in line or "profile" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
                     command = line
                     break
             content = response
@@ -1200,7 +1200,7 @@ def final_optimization(cfg):
                         funcs += opt.read()
                 prompt = "The requested functions are:\n" + funcs
                 message_list.append({"role": "user", "content": prompt})
-            elif "profile:" in response:
+            elif "profile" in response:
                 cfg.agent_profile_calls += 1
                 cfg.agent_sequence.append(response)
                 # run gprof

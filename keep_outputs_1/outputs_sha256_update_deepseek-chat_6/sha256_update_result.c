@@ -61,13 +61,13 @@ void sha256_transform_hls(state_t state, data_t data)
   unsigned int t2;
   unsigned int m[64];
   
-  // Partially unroll the first loop (unroll factor of 2)
-  #pragma hls_unroll 2
+  // Partially unroll the first loop (unroll factor 8)
+  #pragma hls_unroll 8
   for (i = 0, j = 0; i < 16; ++i, j += 4)
     m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
 
-  // Partially unroll the second loop (unroll factor of 2)
-  #pragma hls_unroll 2
+  // Partially unroll the second loop (unroll factor 8)
+  #pragma hls_unroll 8
   for (; i < 64; ++i)
     m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
 
@@ -114,7 +114,7 @@ void sha256_transform(state_t *state, data_t *data)
 void sha256_update_hls(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
 {
   int i;
-  #pragma hls_unroll 2
+  #pragma hls_unroll yes
   for (i = 0; i < len; ++i)
   {
     data_int[*datalen_int] = data[i];
