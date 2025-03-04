@@ -11,12 +11,18 @@
 
 void shift(int input, int delay_lane[5], int size)
 {
-  // Fully unroll the loop for lower latency
-  for (int i = size - 1; i > 0; i--)
-  {
-    #pragma hls_unroll yes
-    delay_lane[i] = delay_lane[i - 1];
-  }
+  // Fully unrolled version using if-statements to achieve minimal latency.
+  // The chain of assignments is done in reverse order to create a combinational
+  // shift register while avoiding loop overhead.
+  if (size > 4)
+    delay_lane[4] = delay_lane[3];
+  if (size > 3)
+    delay_lane[3] = delay_lane[2];
+  if (size > 2)
+    delay_lane[2] = delay_lane[1];
+  if (size > 1)
+    delay_lane[1] = delay_lane[0];
+
   delay_lane[0] = input;
 }
 
@@ -33,66 +39,53 @@ int mac(int delay_lane[5], int taps[5], int size)
 
 void fir(int input, int *output, int taps[5])
 {
-  // To minimize latency further we remove the loops entirely and do the operations
-  // in a fully unrolled, combinational style.
-  // We first capture the needed delay values so that we can update the delay line
-  // without worrying about sequential dependencies.
+    // Inline the function so that the internal loops in shift and mac become visible
+    // to the synthesis tool. Also, set the pipeline initiation interval to 0 (i.e. disable pipelining)
+    // to favor full unrolling of internal loops and hence lower latency.
+#pragma HLS inline
+#pragma HLS pipeline_init_interval 0
 
-  static int delay_lane[5] = {0};
-  #pragma HLS array_partition variable=delay_lane complete
+    // Fully partition the delay_lane array to allow parallel accesses in shift and mac,
+    // which contributes to reducing latency.
+    static int delay_lane[5] = {0};
+#pragma HLS array_partition variable=delay_lane complete dim=1
 
-  // Latch the old delay values needed for compute and update.
-  int d0 = delay_lane[0];
-  int d1 = delay_lane[1];
-  int d2 = delay_lane[2];
-  int d3 = delay_lane[3];
-  // Note: delay_lane[4] is not used in the computation (dropped on shift)
-
-  // Compute the MAC with the new delay line values:
-  // new delay_lane[0] will be 'input', and for indices 1...4, the value
-  // corresponds to the previous delay_lane shifted right.
-  int acc = input * taps[0] +
-            d0    * taps[1] +
-            d1    * taps[2] +
-            d2    * taps[3] +
-            d3    * taps[4];
-
-  // Update the delay line to reflect the shift-register behavior:
-  // The new delay_line = { input, old d0, old d1, old d2, old d3 }
-  delay_lane[0] = input;
-  delay_lane[1] = d0;
-  delay_lane[2] = d1;
-  delay_lane[3] = d2;
-  delay_lane[4] = d3;
-
-  *output = acc;
+    shift(input, delay_lane, 5);
+    *output = mac(delay_lane, taps, 5);
 }
 
 void iir(int input, int *output, int feedforward_taps[5], int feedback_taps[5])
 {
-  // Partition the delay lanes to allow concurrent accesses in the inner loops of shift and mac,
-  // thereby reducing the latency.
-  static int input_delay_lane[5] = {};
-  static int output_delay_lane[5] = {};
-#pragma HLS array_partition variable=input_delay_lane complete
-#pragma HLS array_partition variable=output_delay_lane complete
+    // Optimize for latency by inlining the function calls.
+    // This forces the compiler to expose inner loop structures in the
+    // child functions (shift and mac) which can then be fully unrolled.
+    #pragma HLS inline
 
-  // Inline these function calls to enable the tool to fully unroll the loops inside them.
-  #pragma HLS inline
-  shift(input, input_delay_lane, 5);
+    static int input_delay_lane[5] = {};
+    static int output_delay_lane[5] = {};
 
-  int feedforward = mac(input_delay_lane, feedforward_taps, 5);
-  int feedback = mac(output_delay_lane, feedback_taps, 5);
+    // Inline the shift to minimize overhead.
+    #pragma HLS inline
+    shift(input, input_delay_lane, 5);
 
-  *output = feedforward + feedback;
-  shift(*output, output_delay_lane, 5);
+    // Compute feedforward and feedback contributions.
+    // Assuming that mac() contains internal loops, inlining it here
+    // may allow its loops to be fully unrolled in subsequent optimization passes.
+    int feedforward = mac(input_delay_lane, feedforward_taps, 5);
+    int feedback    = mac(output_delay_lane, feedback_taps, 5);
+
+    *output = feedforward + feedback;
+
+    // Inline the final shift call as well.
+    #pragma HLS inline
+    shift(*output, output_delay_lane, 5);
 }
 
 void filter(int input, int *fir_output, int *iir_output)
 {
-  // Enable dataflow to execute the FIR and IIR stages concurrently,
-  // reducing the overall latency of the filter function.
-  #pragma HLS dataflow
+  // Apply dataflow to enable concurrent execution of the FIR and IIR filters,
+  // reducing the overall latency.
+#pragma HLS dataflow
 
   int fir_taps[NUM_TAPS] = {1, 2, 3, 2, 1};
   int feedforward_taps[NUM_TAPS] = {1, 2, 3, 2, 1};

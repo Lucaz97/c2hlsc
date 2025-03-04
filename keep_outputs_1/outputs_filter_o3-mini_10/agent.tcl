@@ -4,7 +4,7 @@ solution options set /OnTheFly/VthAttributeType cell_lib
 solution options set /Input/TargetPlatform x86_64
 solution options set /Output/OutputVHDL false
 solution options set /Output/GenerateCycleNetlist false
-solution file add tmp_filter/filter_o3-mini_agent_12.c -type C++
+solution file add tmp_filter/filter_o3-mini_agent_2.c -type C++
 directive set -DESIGN_GOAL area
 directive set -SPECULATE true
 directive set -MERGEABLE true

@@ -11,11 +11,11 @@
 
 void shift(int input, int delay_lane[5], int size)
 {
-  // Manually unroll the loop for size = 5
-  delay_lane[4] = delay_lane[3];
-  delay_lane[3] = delay_lane[2];
-  delay_lane[2] = delay_lane[1];
-  delay_lane[1] = delay_lane[0];
+  #pragma hls_unroll yes
+  for (int i = size - 1; i > 0; i--)
+  {
+    delay_lane[i] = delay_lane[i - 1];
+  }
 
   delay_lane[0] = input;
 }
@@ -23,31 +23,26 @@ void shift(int input, int delay_lane[5], int size)
 int mac(int delay_lane[5], int taps[5], int size)
 {
   int result = 0;
-  result += delay_lane[0] * taps[0];
-  result += delay_lane[1] * taps[1];
-  result += delay_lane[2] * taps[2];
-  result += delay_lane[3] * taps[3];
-  result += delay_lane[4] * taps[4];
+  #pragma hls_unroll yes
+  for (int i = 0; i < size; i++)
+  {
+    result += delay_lane[i] * taps[i];
+  }
+
   return result;
 }
 
 void fir(int input, int *output, int taps[5])
 {
   static int delay_lane[5] = {};
-
-  // Shift operation (no unrolling)
-  for (int i = 4; i > 0; i--) {
-    delay_lane[i] = delay_lane[i-1];
-  }
-  delay_lane[0] = input;
-
-  // Fully unroll the MAC loop
-  int acc = 0;
+  
+  // Unroll the shift operation to reduce latency
   #pragma hls_unroll yes
-  for (int i = 0; i < 5; i++) {
-    acc += delay_lane[i] * taps[i];
-  }
-  *output = acc;
+  shift(input, delay_lane, 5);
+  
+  // Unroll the MAC operation to reduce latency
+  #pragma hls_unroll yes
+  *output = mac(delay_lane, taps, 5);
 }
 
 void iir(int input, int *output, int feedforward_taps[5], int feedback_taps[5])
@@ -92,13 +87,11 @@ void filter(int input, int *fir_output, int *iir_output)
   int feedforward_taps[5] = {1, 2, 3, 2, 1};
   int feedback_taps[5] = {0, 1, -1, 0, 0};
 
-  // Assume fir and iir functions are defined elsewhere
-  // and contain loops that can be unrolled for latency optimization.
-
-  // Fully unroll loops in fir and iir functions
+  // Unroll the loops in the FIR filter
   #pragma hls_unroll yes
   fir(input, fir_output, fir_taps);
 
+  // Unroll the loops in the IIR filter
   #pragma hls_unroll yes
   iir(input, iir_output, feedforward_taps, feedback_taps);
 }
