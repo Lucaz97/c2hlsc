@@ -20,7 +20,7 @@
 #define MAX(A, B) (((A) > (B)) ? (A) : (B))
 
 
-void fill_matrix_hls(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
+void fill_matrix(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
   int score;
   int up_left;
@@ -32,55 +32,54 @@ void fill_matrix_hls(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char p
   int a_idx;
   int b_idx;
 
-  // Initialize the first row and column of the matrix M
+  // Initialize the first row
   for (a_idx = 0; a_idx < (16 + 1); a_idx++)
   {
-    M[0][a_idx] = a_idx * GAP_SCORE;
+    M[0][a_idx] = a_idx * (-1);
   }
 
+  // Initialize the first column
   for (b_idx = 0; b_idx < (16 + 1); b_idx++)
   {
-    M[b_idx][0] = b_idx * GAP_SCORE;
+    M[b_idx][0] = b_idx * (-1);
   }
 
-  // Fill the matrix
+  // Main computation loop
   for (b_idx = 1; b_idx < (16 + 1); b_idx++)
   {
+    #pragma HLS PIPELINE II=1
     for (a_idx = 1; a_idx < (16 + 1); a_idx++)
     {
-      score = (seqA[a_idx - 1] == seqB[b_idx - 1]) ? MATCH_SCORE : MISMATCH_SCORE;
+      #pragma HLS UNROLL
+      score = (seqA[a_idx - 1] == seqB[b_idx - 1]) ? (1) : (-1);
       row_up = b_idx - 1;
       row = b_idx;
       up_left = M[row_up][a_idx - 1] + score;
-      up = M[row_up][a_idx] + GAP_SCORE;
-      left = M[row][a_idx - 1] + GAP_SCORE;
-      max = MAX(up_left, MAX(up, left));
+      up = M[row_up][a_idx] + (-1);
+      left = M[row][a_idx - 1] + (-1);
+      max = (up_left > ((up > left) ? (up) : (left))) ? (up_left) : ((up > left) ? (up) : (left));
       M[row][a_idx] = max;
       if (max == left)
       {
-        ptr[row][a_idx] = SKIPB;
+        ptr[row][a_idx] = '<';
       }
       else if (max == up)
       {
-        ptr[row][a_idx] = SKIPA;
+        ptr[row][a_idx] = '^';
       }
       else
       {
-        ptr[row][a_idx] = ALIGN;
+        ptr[row][a_idx] = '\\';
       }
     }
   }
-}
-
-void fill_matrix(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
-{
-  fill_matrix_hls(seqA, seqB, M, ptr);
 }
 
 void reverse_string(char str[16 + 16], int length)
 {
   int start = 0;
   int end = length - 1;
+  
   #pragma hls_unroll yes
   while (start < end)
   {
@@ -98,8 +97,9 @@ void traceback(char seqA[16], char seqB[16], char alignedA[16 + 16], char aligne
   int b_idx = 16;
   int a_str_idx = 0;
   int b_str_idx = 0;
+  int row;
 
-  #pragma HLS PIPELINE II=1
+  #pragma hls_pipeline_init_interval 1
   while ((a_idx > 0) || (b_idx > 0))
   {
     int r = b_idx;
@@ -130,13 +130,10 @@ void traceback(char seqA[16], char seqB[16], char alignedA[16 + 16], char aligne
 
 void needwun(char seqA[16], char seqB[16], char alignedA[16 + 16], char alignedB[16 + 16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
-    #pragma HLS PIPELINE II=1
-    #pragma HLS UNROLL
-    fill_matrix_hls(seqA, seqB, M, ptr);
-    
-    #pragma HLS PIPELINE II=1
-    #pragma HLS UNROLL
-    traceback(seqA, seqB, alignedA, alignedB, M, ptr);
+  #pragma HLS INLINE
+  #pragma HLS PIPELINE II=1
+  fill_matrix(seqA, seqB, M, ptr);
+  traceback(seqA, seqB, alignedA, alignedB, M, ptr);
 }
 int main()
 {

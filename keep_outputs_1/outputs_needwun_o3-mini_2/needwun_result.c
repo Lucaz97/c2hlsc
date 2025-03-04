@@ -27,58 +27,41 @@ void fill_matrix(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[1
   int up;
   int left;
   int max;
-  int i, j;
-  int d;
-  int i_min;
-  int i_max;
+  int row;
+  int row_up;
+  int a_idx;
+  int b_idx;
 
-  // Fully initialize first row and first column (indices 0 to 16)
-  int idx;
-  for (idx = 0; idx < (16 + 1); idx++)
-  {
+  // Initialize the first row of M
+  for (a_idx = 0; a_idx < (16 + 1); a_idx++) {
     #pragma hls_unroll yes
-    M[0][idx] = -idx;
-  }
-  for (idx = 0; idx < (16 + 1); idx++)
-  {
-    #pragma hls_unroll yes
-    M[idx][0] = -idx;
+    M[0][a_idx] = a_idx * (-1);
   }
 
-  // Compute the DP table in anti-diagonal order.
-  // This reordering preserves dependencies while exposing parallelism within each anti-diagonal.
-  // The matrix dimensions are 17x17. Valid indices: i (row) from 1 to 16, j (col) from 1 to 16.
-  // The anti-diagonals are defined by d = i + j, and d runs from 2 up to (16+16)=32.
-  for (d = 2; d <= (16 + 16); d++) {
-    #pragma hls_pipeline_init_interval 1
-    // Compute valid range for row index i:
-    // i must be at least 1 and at least d - 16 (since j = d - i <= 16)
-    i_min = (d > 16) ? (d - 16) : 1;
-    // i must be at most 16 and at most d - 1 (since j = d - i must be at least 1)
-    i_max = (d - 1 < 16) ? (d - 1) : 16;
-    // Process all cells on the anti-diagonal concurrently.
-    for (i = i_min; i <= i_max; i++) {
+  // Initialize the first column of M
+  for (b_idx = 0; b_idx < (16 + 1); b_idx++) {
+    #pragma hls_unroll yes
+    M[b_idx][0] = b_idx * (-1);
+  }
+
+  // Fill in the rest of the matrix and record the traceback
+  for (b_idx = 1; b_idx < (16 + 1); b_idx++) {
+    for (a_idx = 1; a_idx < (16 + 1); a_idx++) {
       #pragma hls_unroll yes
-      j = d - i;
-      // Compute match/mismatch score: note that seqA is indexed by (j-1) and seqB by (i-1)
-      score = (seqA[j - 1] == seqB[i - 1]) ? MATCH_SCORE : MISMATCH_SCORE;
-      up_left = M[i - 1][j - 1] + score;
-      up      = M[i - 1][j]     + GAP_SCORE;
-      left    = M[i][j - 1]     + GAP_SCORE;
-      max = (up_left > ((up > left) ? up : left)) ? up_left : ((up > left) ? up : left);
-      M[i][j] = max;
-
-      if (max == left)
-      {
-        ptr[i][j] = SKIPB;
-      }
-      else if (max == up)
-      {
-        ptr[i][j] = SKIPA;
-      }
-      else
-      {
-        ptr[i][j] = ALIGN;
+      score   = (seqA[a_idx - 1] == seqB[b_idx - 1]) ? (1) : (-1);
+      row_up  = b_idx - 1;
+      row     = b_idx;
+      up_left = M[row_up][a_idx - 1] + score;
+      up      = M[row_up][a_idx] + (-1);
+      left    = M[row][a_idx - 1] + (-1);
+      max     = (up_left > ((up > left) ? (up) : (left))) ? (up_left) : ((up > left) ? (up) : (left));
+      M[row][a_idx] = max;
+      if (max == left) {
+        ptr[row][a_idx] = '<';
+      } else if (max == up) {
+        ptr[row][a_idx] = '^';
+      } else {
+        ptr[row][a_idx] = '\\';
       }
     }
   }
@@ -86,397 +69,65 @@ void fill_matrix(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[1
 
 void reverse_string(char str[16 + 16], int length)
 {
-    // Using a fixed loop bound (ALEN = 16) and a conditional swap 
-    // allows full unrolling of a known iteration count.
-    for (int i = 0; i < ALEN; i++) {
-        #pragma hls_unroll yes
-        if (i < (length >> 1)) {
-            char temp = str[i];
-            str[i] = str[length - i - 1];
-            str[length - i - 1] = temp;
-        }
-    }
+  int n = length >> 1; // n = length/2
+  // Fully unroll the loop to minimize latency
+  for (int i = 0; i < n; i++) {
+    #pragma hls_unroll yes
+    char temp = str[i];
+    str[i] = str[length - i - 1];
+    str[length - i - 1] = temp;
+  }
 }
 
-// In this optimized version for latency we completely unroll the backtracking
-// loop by writing out each iteration explicitly. With ALEN and BLEN fixed to 16,
-// the maximum number of iterations is 32. This removes the loop overhead and
-// minimizes the sequential control latency at the cost of increased area.
-void traceback(char seqA[16], char seqB[16],
-               char alignedA[16 + 16], char alignedB[16 + 16],
-               int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
+void traceback(char seqA[16], char seqB[16], char alignedA[16 + 16], char alignedB[16 + 16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
-  int a_idx     = ALEN;
-  int b_idx     = BLEN;
+  int a_idx = 16;
+  int b_idx = 16;
   int a_str_idx = 0;
   int b_str_idx = 0;
 
-  // Manually unrolled 32 iterations (ALEN+BLEN)
-  // Each step updates the indices according to the traceback arrow at ptr[b_idx][a_idx].
-  // This fully unrolled chain minimizes latency by eliminating loop control overhead.
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  // --- Steps 9 to 32 (repeat the same pattern) ---
-  // For brevity, the same code block is replicated for each of the remaining iterations.
-  // In an actual implementation, a script or macro might be used to generate these blocks.
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
+  // Since the maximum number of iterations is fixed (at most 32),
+  // replace the while loop with a for-loop and fully unroll it to minimize latency.
+  // This transformation avoids loop control overhead and creates combinational paths.
+  for (int i = 0; i < (16 + 16); i++) {
+    #pragma hls_unroll yes
+    // Exit early if both indices have reached 0
+    if ((a_idx == 0) && (b_idx == 0))
+      break;
 
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
+    int r = b_idx;
+    if (ptr[r][a_idx] == '\\') {
       alignedA[a_str_idx++] = seqA[a_idx - 1];
       alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
+      a_idx--;
+      b_idx--;
+    }
+    else if (ptr[r][a_idx] == '<') {
       alignedA[a_str_idx++] = seqA[a_idx - 1];
       alignedB[b_str_idx++] = '-';
       a_idx--;
-    } else {
+    }
+    else {
       alignedA[a_str_idx++] = '-';
       alignedB[b_str_idx++] = seqB[b_idx - 1];
       b_idx--;
     }
   }
   
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  if ((a_idx > 0) || (b_idx > 0)) {
-    char direction = ptr[b_idx][a_idx];
-    if (direction == ALIGN) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      a_idx--; b_idx--;
-    } else if (direction == SKIPB) {
-      alignedA[a_str_idx++] = seqA[a_idx - 1];
-      alignedB[b_str_idx++] = '-';
-      a_idx--;
-    } else {
-      alignedA[a_str_idx++] = '-';
-      alignedB[b_str_idx++] = seqB[b_idx - 1];
-      b_idx--;
-    }
-  }
-  
-  // End of unrolled iterations (32 steps in total)
-
-  // Reverse the aligned sequences to obtain the final result.
   reverse_string(alignedA, a_str_idx);
   reverse_string(alignedB, b_str_idx);
 }
 
-void needwun(char seqA[16], char seqB[16],
-             char alignedA[16 + 16],
-             char alignedB[16 + 16],
-             int M[16 + 1][16 + 1],
-             char ptr[16 + 1][16 + 1])
+void needwun(char seqA[16], char seqB[16], 
+             char alignedA[16 + 16], char alignedB[16 + 16], 
+             int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
-    // To optimize for latency, we inline the child function calls,
-    // which eliminates the function call overhead.
-    #pragma HLS inline region
-    fill_matrix(seqA, seqB, M, ptr);
+    // In order to minimize latency it is beneficial to inline the core function calls.
+    // Full inlining can remove function call overhead and enable optimizations into the inner loops
+    // (for example, loop unrolling or pipelining in fill_matrix and traceback, if implemented there).
+    #pragma HLS inline
 
-    #pragma HLS inline region
+    fill_matrix(seqA, seqB, M, ptr);
     traceback(seqA, seqB, alignedA, alignedB, M, ptr);
 }
 int main()

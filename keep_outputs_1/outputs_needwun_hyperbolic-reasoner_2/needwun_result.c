@@ -22,119 +22,121 @@
 
 void fill_matrix(char seqA[16], char seqB[16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
-  // Partition arrays to enable parallel access patterns
-  #pragma HLS array_partition variable=M dim=1 complete
-  #pragma HLS array_partition variable=ptr dim=1 complete
-  #pragma HLS array_partition variable=seqA dim=1 complete
-  #pragma HLS array_partition variable=seqB dim=1 complete
+  int score;
+  int up_left;
+  int up;
+  int left;
+  int max;
+  int row;
+  int row_up;
+  int a_idx;
+  int b_idx;
 
-  // Unrolled initialization with constant propagation
-  #pragma HLS unroll yes
-  for (int a_idx = 0; a_idx < (16 + 1); a_idx++) {
-    M[0][a_idx] = -a_idx;
+  // Fully unroll initial row initialization
+  for (a_idx = 0; a_idx < (16 + 1); a_idx++)
+  {
+    #pragma HLS unroll yes
+    M[0][a_idx] = a_idx * (-1);
   }
 
-  #pragma HLS unroll yes
-  for (int b_idx = 0; b_idx < (16 + 1); b_idx++) {
-    M[b_idx][0] = -b_idx;
+  // Fully unroll initial column initialization
+  for (b_idx = 0; b_idx < (16 + 1); b_idx++)
+  {
+    #pragma HLS unroll yes
+    M[b_idx][0] = b_idx * (-1);
   }
 
-  // Anti-diagonal processing with optimized dependency chain
-  for (int d = 2; d <= (16*2); d++) {
+  // Process matrix with inner loop unrolling
+  for (b_idx = 1; b_idx < (16 + 1); b_idx++)
+  {
     #pragma HLS pipeline II=1
-    const int start = (d > 16) ? (d - 16) : 1;
-    const int end = (d <= 16) ? (d - 1) : 16;
-    
-    #pragma HLS unroll
-    for (int a_idx = start; a_idx <= end; a_idx++) {
-      const int b_idx = d - a_idx;
-      const int score = (seqA[a_idx-1] == seqB[b_idx-1]) ? MATCH_SCORE : MISMATCH_SCORE;
+    for (a_idx = 1; a_idx < (16 + 1); a_idx++)
+    {
+      #pragma HLS unroll yes
+      score = (seqA[a_idx - 1] == seqB[b_idx - 1]) ? (1) : (-1);
+      row_up = b_idx - 1;
+      row = b_idx;
+      up_left = M[row_up][a_idx - 1] + score;
+      up = M[row_up][a_idx] + (-1);
+      left = M[row][a_idx - 1] + (-1);
+      max = (up_left > ((up > left) ? (up) : (left))) ? (up_left) : ((up > left) ? (up) : (left));
+      M[row][a_idx] = max;
       
-      const int up_left = M[b_idx-1][a_idx-1] + score;
-      const int up = M[b_idx-1][a_idx] + GAP_SCORE;
-      const int left = M[b_idx][a_idx-1] + GAP_SCORE;
-      
-      const int max = MAX(up_left, MAX(up, left));
-      
-      M[b_idx][a_idx] = max;
-      ptr[b_idx][a_idx] = (max == left) ? SKIPB : 
-                         ((max == up) ? SKIPA : ALIGN);
+      if (max == left) {
+        ptr[row][a_idx] = '<';
+      } else if (max == up) {
+        ptr[row][a_idx] = '^';
+      } else {
+        ptr[row][a_idx] = '\\';
+      }
     }
   }
 }
 
 void reverse_string(char str[16 + 16], int length)
 {
-  // Fully unroll maximum possible iterations (16 swaps for length=32)
-  // Use parallel conditional swaps to minimize latency
-  #pragma HLS inline off
-  #pragma HLS latency min=1 max=1
+  #pragma HLS inline
+  #pragma HLS pipeline_init_interval 0
   
-  SwapLoop:
-  for(int i = 0; i < 16; i++) {
-    #pragma HLS unroll
-    if(i < (length >> 1)) {  // Use bitwise shift for HLS-friendly division
-      int end = length-1-i;
+  // Convert to maximum fixed iterations pattern for better unrolling
+  #pragma HLS unroll yes
+  for(int i = 0; i < 16; i++) { // Maximum possible iterations for 32-char array
+    if(i < (length >> 1)) {      // Conditional execution based on actual length
+      int end_idx = length - 1 - i;
       char temp = str[i];
-      str[i] = str[end];
-      str[end] = temp;
+      str[i] = str[end_idx];
+      str[end_idx] = temp;
     }
   }
 }
 
-void traceback(char seqA[16], char seqB[16], char alignedA[32], char alignedB[32], int M[17][17], char ptr[17][17]) {
-    #pragma HLS array_partition variable=ptr dim=2 complete
-    #pragma HLS array_partition variable=seqA complete
-    #pragma HLS array_partition variable=seqB complete
-    #pragma HLS array_partition variable=alignedA cyclic factor=4
-    #pragma HLS array_partition variable=alignedB cyclic factor=4
+void traceback(char seqA[16], char seqB[16], char alignedA[16 + 16], char alignedB[16 + 16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
+{
+#pragma HLS array_partition variable=ptr complete dim=1
+#pragma HLS array_partition variable=alignedA complete
+#pragma HLS array_partition variable=alignedB complete
+  int a_idx = 16;
+  int b_idx = 16;
+  int a_str_idx = 0;
+  int b_str_idx = 0;
 
-    int a_idx = 16;
-    int b_idx = 16;
-    int a_str_idx = 0;
-    int b_str_idx = 0;
-
-    // Optimized fixed-bound loop with partial unrolling
-    #pragma HLS loop_tripcount max=32
-    #pragma HLS pipeline II=1
-    #pragma HLS unroll factor=4
-    for (int i = 0; i < 32; i++) {
-        #pragma HLS protocol fixed
-        if (!(a_idx > 0 || b_idx > 0)) break;
-
-        char direction = ptr[b_idx][a_idx];
-
-        // Parallel path evaluation with speculative writes
-        if (direction == '\\') {
-            alignedA[a_str_idx] = seqA[a_idx - 1];
-            alignedB[b_str_idx] = seqB[b_idx - 1];
-            a_idx--;
-            b_idx--;
-        } else if (direction == '<') {
-            alignedA[a_str_idx] = seqA[a_idx - 1];
-            alignedB[b_str_idx] = '-';
-            a_idx--;
-        } else {
-            alignedA[a_str_idx] = '-';
-            alignedB[b_str_idx] = seqB[b_idx - 1];
-            b_idx--;
-        }
-        
-        // Unified index increment pattern
-        a_str_idx++;
-        b_str_idx++;
+  for (int i = 0; i < 32; i++) {
+#pragma HLS pipeline II=1
+    if (a_idx == 0 && b_idx == 0) break;
+    
+    int r = b_idx;
+    char direction = ptr[r][a_idx];
+    
+    if (direction == '\\') {
+      alignedA[a_str_idx] = (a_idx > 0) ? seqA[a_idx-1] : '-';
+      alignedB[b_str_idx] = (b_idx > 0) ? seqB[b_idx-1] : '-';
+      a_idx--;
+      b_idx--;
+    } else if (direction == '<') {
+      alignedA[a_str_idx] = (a_idx > 0) ? seqA[a_idx-1] : '-';
+      alignedB[b_str_idx] = '-';
+      a_idx--;
+    } else {
+      alignedA[a_str_idx] = '-';
+      alignedB[b_str_idx] = (b_idx > 0) ? seqB[b_idx-1] : '-';
+      b_idx--;
     }
+    
+    a_str_idx++;
+    b_str_idx++;
+  }
 
-    reverse_string(alignedA, a_str_idx);
-    reverse_string(alignedB, b_str_idx);
+  reverse_string(alignedA, a_str_idx);
+  reverse_string(alignedB, b_str_idx);
 }
 
 void needwun(char seqA[16], char seqB[16], char alignedA[16 + 16], char alignedB[16 + 16], int M[16 + 1][16 + 1], char ptr[16 + 1][16 + 1])
 {
-  // Force inline child functions to enable loop optimizations
+  // Inline and fully unroll matrix filling to eliminate loop overhead
   #pragma HLS inline
   fill_matrix(seqA, seqB, M, ptr);
-  
+
+  // Inline and fully unroll traceback to collapse alignment steps
   #pragma HLS inline
   traceback(seqA, seqB, alignedA, alignedB, M, ptr);
 }
