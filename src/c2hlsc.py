@@ -484,6 +484,7 @@ def build_unit_test(func, filename, cfg):
         # get addresses
         with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
             print("import gdb", file =f)
+            print(f"""gdb.execute("set print elements unlimited")""", file=f)
             print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
             print(f"""gdb.execute("break {func}")""", file =f)
             print("""gdb.execute("run")""", file =f)
@@ -568,6 +569,7 @@ def build_unit_test(func, filename, cfg):
     # get values
     with open(f"{cfg.tmp_folder}" + func + "_gdb.py", "w") as f:
         print("import gdb", file =f)
+        print(f"""gdb.execute("set print elements unlimited")""", file=f)
         print(f"""gdb.execute("file {cfg.tmp_folder}to_debug")""", file=f)
         print(f"""gdb.execute("break {func}")""", file =f)
         print("""gdb.execute("run")""", file =f)
@@ -1171,7 +1173,7 @@ def final_optimization(cfg):
         cfg.llm_runs[model_name] += 1
         if "\n" in response:
             for line in response.split("\n"):
-                if "inspect:" in line or "profile:" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
+                if "inspect:" in line or "profile" in line or "synthesis:" in line or "python:" in line or "solution:" in line:
                     command = line
                     break
             content = response
@@ -1198,7 +1200,7 @@ def final_optimization(cfg):
                         funcs += opt.read()
                 prompt = "The requested functions are:\n" + funcs
                 message_list.append({"role": "user", "content": prompt})
-            elif "profile:" in response:
+            elif "profile" in response:
                 cfg.agent_profile_calls += 1
                 cfg.agent_sequence.append(response)
                 # run gprof
@@ -1399,7 +1401,7 @@ def characterize_benchmark():
     v.visit(ast)
     
     # print(cfg.calls_table)
-    explore_calls(cfg.top_function, cfg.hierarchical_calls) # inits hierarchical_calls
+    explore_calls(cfg.top_function, cfg.hierarchical_calls, cfg) # inits hierarchical_calls
 
     total_lines=0
     min_lines = 99999999
