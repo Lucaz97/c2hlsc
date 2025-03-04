@@ -142,19 +142,19 @@ static void Cipher_hls(state_t state, const round_t RoundKey)
 {
   AddRoundKey_hls(0, state, RoundKey);
 
-  // Fully unroll core rounds with hierarchical optimization
-  #pragma HLS DATAFLOW
-  #pragma HLS UNROLL yes
-  for (uint8_t round = 1; round <= 9; ++round) {
-    #pragma HLS protocol fixed
-    SubBytes_hls(state);
-    ShiftRows_hls(state);
-    MixColumns_hls(state);
-    AddRoundKey_hls(round, state, RoundKey);
-  }
-
-  // Optimized final round
+  // Manually unroll rounds 1-9 with explicit sequence
   #pragma HLS inline
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(1, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(2, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(3, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(4, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(5, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(6, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(7, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(8, state, RoundKey);
+  SubBytes_hls(state); ShiftRows_hls(state); MixColumns_hls(state); AddRoundKey_hls(9, state, RoundKey);
+
+  // Final round
   SubBytes_hls(state);
   ShiftRows_hls(state);
   AddRoundKey_hls(10, state, RoundKey);

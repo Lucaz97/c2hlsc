@@ -68,350 +68,200 @@ The values reported for a function are obtained synthesizing the function in iso
 This means that the child functions are included in the function synthesis. Selecting a different option will affect the final outcome of the parent function.
 Different options use different unrolling and pipelining factors. 
 
-The goal is to minimize the latency while keeping the total area as close as possible to 10000.
+The goal is to minimize the latency while keeping the total area as close as possible to 3800.
 
 Provide your first request:
 
-LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B6LB98zt5gy4AkJ221N1nTvL50l8U', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\'\nfrom ortools.sat.python import cp_model\n\n# Multiply all values by 10 (to convert float to integer)\n# Define target area in multiplied units (target=10000, so 10000*10 = 100000)\ntarget_area = 100000\n\n# Function options as lists of tuples: (area, latency)\nAddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]\nSubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]\nShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]\nxtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]\nMixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]\nCipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]\n\nfunctions = {\n    \'AddRoundKey_hls\': AddRoundKey,\n    \'SubBytes_hls\': SubBytes,\n    \'ShiftRows_hls\': ShiftRows,\n    \'xtime\': xtime,\n    \'MixColumns_hls\': MixColumns,\n    \'Cipher_hls\': Cipher\n}\n\nmodel = cp_model.CpModel()\n\n# Decision variables: for each function, choose an index option\nchoices = {}\nfor func, opts in functions.items():\n    choices[func] = model.NewIntVar(0, len(opts)-1, func + \'_choice\')\n\n# Create expressions for total area and total latency\ntotal_area = sum([ \n    sum([ (opts[i][0] * (choices[func] == i)) for i in range(len(opts)) ])\n    for func, opts in functions.items()\n])\ntotal_latency = sum([ \n    sum([ (opts[i][1] * (choices[func] == i)) for i in range(len(opts)) ])\n    for func, opts in functions.items()\n])\n\n# However, the above summations are not directly linear because (choices[func]==i) is a Boolean.\n# Instead, we create indicator variables.\nindicator = {}\nfor func, opts in functions.items():\n    indicator[func] = []\n    for i in range(len(opts)):\n        ind = model.NewBoolVar(f\'{func}_is_{i}\')\n        indicator[func].append(ind)\n    # Exactly one option must be taken\n    model.Add(sum(indicator[func]) == 1)\n    # Link indicator to the choice variable\n    # choices[func] equals i if indicator[func][i] is true.\n    model.AddDecisionStrategy([choices[func]], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)\n    # We impose: choices[func] == i  <==> indicator[func][i] == 1.\n    # Instead, we use: sum(i * indicator[func][i]) == choices[func]\n    model.Add(sum(i * indicator[func][i] for i in range(len(opts))) == choices[func])\n\n# Now express total_area and total_latency linearly using indicators.\ntotal_area_expr = sum( indicator[func][i] * functions[func][i][0]\n                       for func in functions for i in range(len(functions[func])) )\ntotal_latency_expr = sum( indicator[func][i] * functions[func][i][1]\n                          for func in functions for i in range(len(functions[func])) )\n\n# Introduce an auxiliary variable for area deviation: deviation = |total_area - target_area|\ndev = model.NewIntVar(0, 1000000, \'deviation\')\nmodel.Add(dev >= total_area_expr - target_area)\nmodel.Add(dev >= target_area - total_area_expr)\n\n# We want to primarily minimize latency and secondarily the area deviation.\n# We use a weighted sum objective with a large weight for latency.\nlambda_weight = 100000  # weight for latency deviation\nmodel.Minimize(total_latency_expr * lambda_weight + dev)\n\n# Solve the model.\nsolver = cp_model.CpSolver()\nstatus = solver.Solve(model)\n\nif status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:\n    config = {}\n    print("Solution:")\n    for func in functions:\n        opt = solver.Value(choices[func])\n        config[func] = opt\n        print(f"{func}: option {opt}, area={functions[func][opt][0]/10.0}, latency={functions[func][opt][1]/10.0}")\n    total_area_val = solver.Value(total_area_expr)\n    total_latency_val = solver.Value(total_latency_expr)\n    print(f"Total area = {total_area_val/10.0}")\n    print(f"Total latency = {total_latency_val/10.0}")\n    print(f"Area deviation = {abs(total_area_val - target_area)/10.0}")\nelse:\n    print("No solution found.")\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740851079, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=4713, prompt_tokens=1534, total_tokens=6247, prompt_tokens_details={'cached_tokens': 1408, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 3584, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
-python: '''
-from ortools.sat.python import cp_model
-
-# Multiply all values by 10 (to convert float to integer)
-# Define target area in multiplied units (target=10000, so 10000*10 = 100000)
-target_area = 100000
-
-# Function options as lists of tuples: (area, latency)
-AddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]
-SubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]
-ShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]
-xtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]
-MixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]
-Cipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]
-
-functions = {
-    'AddRoundKey_hls': AddRoundKey,
-    'SubBytes_hls': SubBytes,
-    'ShiftRows_hls': ShiftRows,
-    'xtime': xtime,
-    'MixColumns_hls': MixColumns,
-    'Cipher_hls': Cipher
-}
-
-model = cp_model.CpModel()
-
-# Decision variables: for each function, choose an index option
-choices = {}
-for func, opts in functions.items():
-    choices[func] = model.NewIntVar(0, len(opts)-1, func + '_choice')
-
-# Create expressions for total area and total latency
-total_area = sum([ 
-    sum([ (opts[i][0] * (choices[func] == i)) for i in range(len(opts)) ])
-    for func, opts in functions.items()
-])
-total_latency = sum([ 
-    sum([ (opts[i][1] * (choices[func] == i)) for i in range(len(opts)) ])
-    for func, opts in functions.items()
-])
-
-# However, the above summations are not directly linear because (choices[func]==i) is a Boolean.
-# Instead, we create indicator variables.
-indicator = {}
-for func, opts in functions.items():
-    indicator[func] = []
-    for i in range(len(opts)):
-        ind = model.NewBoolVar(f'{func}_is_{i}')
-        indicator[func].append(ind)
-    # Exactly one option must be taken
-    model.Add(sum(indicator[func]) == 1)
-    # Link indicator to the choice variable
-    # choices[func] equals i if indicator[func][i] is true.
-    model.AddDecisionStrategy([choices[func]], cp_model.CHOOSE_FIRST, cp_model.SELECT_MIN_VALUE)
-    # We impose: choices[func] == i  <==> indicator[func][i] == 1.
-    # Instead, we use: sum(i * indicator[func][i]) == choices[func]
-    model.Add(sum(i * indicator[func][i] for i in range(len(opts))) == choices[func])
-
-# Now express total_area and total_latency linearly using indicators.
-total_area_expr = sum( indicator[func][i] * functions[func][i][0]
-                       for func in functions for i in range(len(functions[func])) )
-total_latency_expr = sum( indicator[func][i] * functions[func][i][1]
-                          for func in functions for i in range(len(functions[func])) )
-
-# Introduce an auxiliary variable for area deviation: deviation = |total_area - target_area|
-dev = model.NewIntVar(0, 1000000, 'deviation')
-model.Add(dev >= total_area_expr - target_area)
-model.Add(dev >= target_area - total_area_expr)
-
-# We want to primarily minimize latency and secondarily the area deviation.
-# We use a weighted sum objective with a large weight for latency.
-lambda_weight = 100000  # weight for latency deviation
-model.Minimize(total_latency_expr * lambda_weight + dev)
-
-# Solve the model.
-solver = cp_model.CpSolver()
-status = solver.Solve(model)
-
-if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-    config = {}
-    print("Solution:")
-    for func in functions:
-        opt = solver.Value(choices[func])
-        config[func] = opt
-        print(f"{func}: option {opt}, area={functions[func][opt][0]/10.0}, latency={functions[func][opt][1]/10.0}")
-    total_area_val = solver.Value(total_area_expr)
-    total_latency_val = solver.Value(total_latency_expr)
-    print(f"Total area = {total_area_val/10.0}")
-    print(f"Total latency = {total_latency_val/10.0}")
-    print(f"Area deviation = {abs(total_area_val - target_area)/10.0}")
-else:
-    print("No solution found.")
-'''
-Prompt:  The output of the script is: 
-Traceback (most recent call last):
-  File "/home/lc4976/c2hlsc_8/tmp_Cipher/python_script_agent_1.py", line 33, in <module>
-    total_area = sum([ 
-                     ^
-  File "/home/lc4976/c2hlsc_8/tmp_Cipher/python_script_agent_1.py", line 34, in <listcomp>
-    sum([ (opts[i][0] * (choices[func] == i)) for i in range(len(opts)) ])
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/lc4976/c2hlsc_8/tmp_Cipher/python_script_agent_1.py", line 34, in <listcomp>
-    sum([ (opts[i][0] * (choices[func] == i)) for i in range(len(opts)) ])
-           ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
-TypeError: unsupported operand type(s) for *: 'int' and 'ortools.sat.python.cp_model_helper.BoundedLinearExpression'
-
-LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B6LBZofgB60owHcwkMCHhjVbzc54Q', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\'\nfrom ortools.sat.python import cp_model\n\n# Multiply all values by 10 (to convert float to integer)\n# Define target area in multiplied units (target=10000, so 10000*10 = 100000)\ntarget_area = 100000\n\n# Function options as lists of tuples: (area, latency)\n# Each tuple is (area, latency) multiplied by 10 to use integers\nAddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]\nSubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]\nShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]\nxtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]\nMixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]\nCipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]\n\nfunctions = {\n    \'AddRoundKey_hls\': AddRoundKey,\n    \'SubBytes_hls\': SubBytes,\n    \'ShiftRows_hls\': ShiftRows,\n    \'xtime\': xtime,\n    \'MixColumns_hls\': MixColumns,\n    \'Cipher_hls\': Cipher\n}\n\nmodel = cp_model.CpModel()\n\n# Create indicator boolean variables for each function\nindicator = {}\nfor func, opts in functions.items():\n    indicator[func] = []\n    for i in range(len(opts)):\n        ind = model.NewBoolVar(f\'{func}_is_{i}\')\n        indicator[func].append(ind)\n    # Ensure exactly one option is chosen per function\n    model.Add(sum(indicator[func]) == 1)\n\n# Express total area and total latency using indicator variables\ntotal_area_expr = sum(\n    indicator[func][i] * functions[func][i][0]\n    for func in functions\n    for i in range(len(functions[func]))\n)\ntotal_latency_expr = sum(\n    indicator[func][i] * functions[func][i][1]\n    for func in functions\n    for i in range(len(functions[func]))\n)\n\n# Introduce an auxiliary variable for area deviation: deviation = |total_area - target_area|\ndev = model.NewIntVar(0, 1000000, \'deviation\')\nmodel.Add(dev >= total_area_expr - target_area)\nmodel.Add(dev >= target_area - total_area_expr)\n\n# We want to primarily minimize latency and secondarily minimize the area deviation.\n# Use a weighted sum objective with a large weight for latency.\nlambda_weight = 100000  # weight for latency\nmodel.Minimize(total_latency_expr * lambda_weight + dev)\n\n# Solve the model.\nsolver = cp_model.CpSolver()\nstatus = solver.Solve(model)\n\nif status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:\n    config = {}\n    print("Solution:")\n    for func in functions:\n        for i in range(len(functions[func])):\n            if solver.Value(indicator[func][i]):\n                config[func] = i\n                area_val = functions[func][i][0] / 10.0\n                lat_val = functions[func][i][1] / 10.0\n                print(f"{func}: option {i}, area={area_val}, latency={lat_val}")\n    total_area_val = solver.Value(total_area_expr)\n    total_latency_val = solver.Value(total_latency_expr)\n    print(f"Total area = {total_area_val/10.0}")\n    print(f"Total latency = {total_latency_val/10.0}")\n    print(f"Area deviation = {abs(total_area_val - target_area)/10.0}")\nelse:\n    print("No solution found.")\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740851105, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=1091, prompt_tokens=2883, total_tokens=3974, prompt_tokens_details={'cached_tokens': 1536, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 192, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
-python: '''
-from ortools.sat.python import cp_model
-
-# Multiply all values by 10 (to convert float to integer)
-# Define target area in multiplied units (target=10000, so 10000*10 = 100000)
-target_area = 100000
-
-# Function options as lists of tuples: (area, latency)
-# Each tuple is (area, latency) multiplied by 10 to use integers
-AddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]
-SubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]
-ShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]
-xtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]
-MixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]
-Cipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]
-
-functions = {
-    'AddRoundKey_hls': AddRoundKey,
-    'SubBytes_hls': SubBytes,
-    'ShiftRows_hls': ShiftRows,
-    'xtime': xtime,
-    'MixColumns_hls': MixColumns,
-    'Cipher_hls': Cipher
-}
-
-model = cp_model.CpModel()
-
-# Create indicator boolean variables for each function
-indicator = {}
-for func, opts in functions.items():
-    indicator[func] = []
-    for i in range(len(opts)):
-        ind = model.NewBoolVar(f'{func}_is_{i}')
-        indicator[func].append(ind)
-    # Ensure exactly one option is chosen per function
-    model.Add(sum(indicator[func]) == 1)
-
-# Express total area and total latency using indicator variables
-total_area_expr = sum(
-    indicator[func][i] * functions[func][i][0]
-    for func in functions
-    for i in range(len(functions[func]))
-)
-total_latency_expr = sum(
-    indicator[func][i] * functions[func][i][1]
-    for func in functions
-    for i in range(len(functions[func]))
-)
-
-# Introduce an auxiliary variable for area deviation: deviation = |total_area - target_area|
-dev = model.NewIntVar(0, 1000000, 'deviation')
-model.Add(dev >= total_area_expr - target_area)
-model.Add(dev >= target_area - total_area_expr)
-
-# We want to primarily minimize latency and secondarily minimize the area deviation.
-# Use a weighted sum objective with a large weight for latency.
-lambda_weight = 100000  # weight for latency
-model.Minimize(total_latency_expr * lambda_weight + dev)
-
-# Solve the model.
-solver = cp_model.CpSolver()
-status = solver.Solve(model)
-
-if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-    config = {}
-    print("Solution:")
-    for func in functions:
-        for i in range(len(functions[func])):
-            if solver.Value(indicator[func][i]):
-                config[func] = i
-                area_val = functions[func][i][0] / 10.0
-                lat_val = functions[func][i][1] / 10.0
-                print(f"{func}: option {i}, area={area_val}, latency={lat_val}")
-    total_area_val = solver.Value(total_area_expr)
-    total_latency_val = solver.Value(total_latency_expr)
-    print(f"Total area = {total_area_val/10.0}")
-    print(f"Total latency = {total_latency_val/10.0}")
-    print(f"Area deviation = {abs(total_area_val - target_area)/10.0}")
-else:
-    print("No solution found.")
-'''
-Prompt:  The output of the script is: 
-Solution:
-AddRoundKey_hls: option 4, area=1900.5, latency=16.0
-SubBytes_hls: option 2, area=825.5, latency=15.0
-ShiftRows_hls: option 4, area=23.9, latency=0.0
-xtime: option 4, area=77.0, latency=1.0
-MixColumns_hls: option 4, area=866.6, latency=0.0
-Cipher_hls: option 4, area=9768.5, latency=175.0
-Total area = 13462.0
-Total latency = 207.0
-Area deviation = 3462.0
-
-LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B6LBhOv77opuFkqMU6ks09x9V3yeL', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\'\nfrom ortools.sat.python import cp_model\n\n# Multiply all values by 10 (to use integers)\n# Target area = 10000, multiplied by 10 -> 100000\ntarget_area = 100000\nlower_bound = 95000\nupper_bound = 105000\n\n# Function options as lists of tuples: (area, latency) multiplied by 10\nAddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]\nSubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]\nShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]\nxtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]\nMixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]\nCipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]\n\nfunctions = {\n    \'AddRoundKey_hls\': AddRoundKey,\n    \'SubBytes_hls\': SubBytes,\n    \'ShiftRows_hls\': ShiftRows,\n    \'xtime\': xtime,\n    \'MixColumns_hls\': MixColumns,\n    \'Cipher_hls\': Cipher\n}\n\nmodel = cp_model.CpModel()\n\n# Create indicator variables for choosing one option per function\nindicator = {}\nfor func, opts in functions.items():\n    indicator[func] = []\n    for i in range(len(opts)):\n        ind = model.NewBoolVar(f\'{func}_option_{i}\')\n        indicator[func].append(ind)\n    model.Add(sum(indicator[func]) == 1)\n\n# Linear expressions for total area and total latency\ntotal_area_expr = sum(\n    indicator[func][i] * functions[func][i][0]\n    for func in functions\n    for i in range(len(functions[func]))\n)\ntotal_latency_expr = sum(\n    indicator[func][i] * functions[func][i][1]\n    for func in functions\n    for i in range(len(functions[func]))\n)\n\n# Add constraints to force total area to be near the target [lower_bound, upper_bound]\nmodel.Add(total_area_expr >= lower_bound)\nmodel.Add(total_area_expr <= upper_bound)\n\n# Objective: minimize total latency under the area constraints.\nmodel.Minimize(total_latency_expr)\n\nsolver = cp_model.CpSolver()\nstatus = solver.Solve(model)\n\nif status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:\n    config = {}\n    print("Solution with area constraints:")\n    for func in functions:\n        for i in range(len(functions[func])):\n            if solver.Value(indicator[func][i]) == 1:\n                config[func] = i\n                area_val = functions[func][i][0] / 10.0\n                lat_val = functions[func][i][1] / 10.0\n                print(f"{func}: option {i}, area = {area_val}, latency = {lat_val}")\n    total_area_val = solver.Value(total_area_expr)\n    total_latency_val = solver.Value(total_latency_expr)\n    print(f"Total area = {total_area_val/10.0}")\n    print(f"Total latency = {total_latency_val/10.0}")\nelse:\n    print("No solution found with the area constraints.")\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740851113, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=7341, prompt_tokens=3941, total_tokens=11282, prompt_tokens_details={'cached_tokens': 2816, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 6528, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
-python: '''
-from ortools.sat.python import cp_model
-
-# Multiply all values by 10 (to use integers)
-# Target area = 10000, multiplied by 10 -> 100000
-target_area = 100000
-lower_bound = 95000
-upper_bound = 105000
-
-# Function options as lists of tuples: (area, latency) multiplied by 10
-AddRoundKey = [(7526, 340), (7394, 310), (7394, 310), (7346, 310), (19005, 160)]
-SubBytes = [(18891, 150), (8310, 210), (8255, 150), (18891, 150), (8290, 150)]
-ShiftRows = [(9756, 190), (239, 0), (239, 0), (239, 0), (239, 0)]
-xtime = [(770, 10), (770, 10), (820, 10), (770, 10), (770, 10)]
-MixColumns = [(8666, 0), (8666, 0), (6399, 30), (8666, 0), (8666, 0)]
-Cipher = [(48692, 1940), (97685, 1750), (48692, 1940), (86220, 2020), (97685, 1750)]
-
-functions = {
-    'AddRoundKey_hls': AddRoundKey,
-    'SubBytes_hls': SubBytes,
-    'ShiftRows_hls': ShiftRows,
-    'xtime': xtime,
-    'MixColumns_hls': MixColumns,
-    'Cipher_hls': Cipher
-}
-
-model = cp_model.CpModel()
-
-# Create indicator variables for choosing one option per function
-indicator = {}
-for func, opts in functions.items():
-    indicator[func] = []
-    for i in range(len(opts)):
-        ind = model.NewBoolVar(f'{func}_option_{i}')
-        indicator[func].append(ind)
-    model.Add(sum(indicator[func]) == 1)
-
-# Linear expressions for total area and total latency
-total_area_expr = sum(
-    indicator[func][i] * functions[func][i][0]
-    for func in functions
-    for i in range(len(functions[func]))
-)
-total_latency_expr = sum(
-    indicator[func][i] * functions[func][i][1]
-    for func in functions
-    for i in range(len(functions[func]))
-)
-
-# Add constraints to force total area to be near the target [lower_bound, upper_bound]
-model.Add(total_area_expr >= lower_bound)
-model.Add(total_area_expr <= upper_bound)
-
-# Objective: minimize total latency under the area constraints.
-model.Minimize(total_latency_expr)
-
-solver = cp_model.CpSolver()
-status = solver.Solve(model)
-
-if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-    config = {}
-    print("Solution with area constraints:")
-    for func in functions:
-        for i in range(len(functions[func])):
-            if solver.Value(indicator[func][i]) == 1:
-                config[func] = i
-                area_val = functions[func][i][0] / 10.0
-                lat_val = functions[func][i][1] / 10.0
-                print(f"{func}: option {i}, area = {area_val}, latency = {lat_val}")
-    total_area_val = solver.Value(total_area_expr)
-    total_latency_val = solver.Value(total_latency_expr)
-    print(f"Total area = {total_area_val/10.0}")
-    print(f"Total latency = {total_latency_val/10.0}")
-else:
-    print("No solution found with the area constraints.")
-'''
-Prompt:  The output of the script is: 
-Solution with area constraints:
-AddRoundKey_hls: option 4, area = 1900.5, latency = 16.0
-SubBytes_hls: option 3, area = 1889.1, latency = 15.0
-ShiftRows_hls: option 4, area = 23.9, latency = 0.0
-xtime: option 4, area = 77.0, latency = 1.0
-MixColumns_hls: option 4, area = 866.6, latency = 0.0
-Cipher_hls: option 2, area = 4869.2, latency = 194.0
-Total area = 9626.3
-Total latency = 226.0
-
-LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B6LCM9YqWvS9NkKOz4GRi7EGXe6wP', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='synthesis: AddRoundKey_hls 4, SubBytes_hls 3, ShiftRows_hls 4, xtime 4, MixColumns_hls 4, Cipher_hls 2', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740851154, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=4917, prompt_tokens=4920, total_tokens=9837, prompt_tokens_details={'cached_tokens': 3968, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 4864, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
-synthesis: AddRoundKey_hls 4, SubBytes_hls 3, ShiftRows_hls 4, xtime 4, MixColumns_hls 4, Cipher_hls 2
-func:  AddRoundKey_hls 4
-func:   SubBytes_hls 3
-func:   ShiftRows_hls 4
-func:   xtime 4
-func:   MixColumns_hls 4
-func:   Cipher_hls 2
-func:  AddRoundKey_hls 4
-func:   SubBytes_hls 3
-func:   ShiftRows_hls 4
-func:   xtime 4
-func:   MixColumns_hls 4
-func:   Cipher_hls 2
-Last Catapult run:  Catapult_50
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B76yXaP6N9KN0TIMOwA0vTbNOARaA', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='synthesis: AddRoundKey_hls 3, SubBytes_hls 2, ShiftRows_hls 1, xtime 0, MixColumns_hls 2, Cipher_hls 0', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1741034809, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=5109, prompt_tokens=1534, total_tokens=6643, prompt_tokens_details={'cached_tokens': 1408, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 5056, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+synthesis: AddRoundKey_hls 3, SubBytes_hls 2, ShiftRows_hls 1, xtime 0, MixColumns_hls 2, Cipher_hls 0
+func:  AddRoundKey_hls 3
+func:   SubBytes_hls 2
+func:   ShiftRows_hls 1
+func:   xtime 0
+func:   MixColumns_hls 2
+func:   Cipher_hls 0
+func:  AddRoundKey_hls 3
+func:   SubBytes_hls 2
+func:   ShiftRows_hls 1
+func:   xtime 0
+func:   MixColumns_hls 2
+func:   Cipher_hls 0
+Last Catapult run:  Catapult_11
   Process          Real Operation(s) count Latency Throughput Reset Length II Comments 
 
   ---------------- ----------------------- ------- ---------- ------------ -- --------
 
-  /Cipher_hls/core                     239     194        196            2  0          
+  /Cipher_hls/core                     370    1091       1096            0  0          
 
-  Design Total:                        239     194        196            2  0          
+  Design Total:                        370    1091       1096            0  0          
 
-                    Post-Scheduling   Post-DP & FSM Post-Assignment 
+                    Post-Scheduling  Post-DP & FSM Post-Assignment 
 
-  ----------------- --------------- --------------- ---------------
+  ----------------- --------------- -------------- ---------------
 
-  Total Area Score:  11794.6          7453.0          4939.1        
+  Total Area Score:   9712.1         2211.9          2630.2        
 
-  Total Reg:          4392.2  (37%)   2754.2  (37%)   2754.2  (56%) 
+  Total Reg:          2100.3  (22%)  1101.1  (50%)   1101.1  (42%) 
 
 Prompt:  The synthesis report from last configuration is as follows: 
   Process          Real Operation(s) count Latency Throughput Reset Length II Comments 
 
   ---------------- ----------------------- ------- ---------- ------------ -- --------
 
-  /Cipher_hls/core                     239     194        196            2  0          
+  /Cipher_hls/core                     370    1091       1096            0  0          
 
-  Design Total:                        239     194        196            2  0          
+  Design Total:                        370    1091       1096            0  0          
 
-                    Post-Scheduling   Post-DP & FSM Post-Assignment 
+                    Post-Scheduling  Post-DP & FSM Post-Assignment 
 
-  ----------------- --------------- --------------- ---------------
+  ----------------- --------------- -------------- ---------------
 
-  Total Area Score:  11794.6          7453.0          4939.1        
+  Total Area Score:   9712.1         2211.9          2630.2        
 
-  Total Reg:          4392.2  (37%)   2754.2  (37%)   2754.2  (56%) 
+  Total Reg:          2100.3  (22%)  1101.1  (50%)   1101.1  (42%) 
  
 
-LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B6LDHpeJK1XvnZIkbJ3ZQJXtQPgYK', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='solution: AddRoundKey_hls 4, SubBytes_hls 3, ShiftRows_hls 4, xtime 4, MixColumns_hls 4, Cipher_hls 2', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1740851211, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=5940, prompt_tokens=5135, total_tokens=11075, prompt_tokens_details={'cached_tokens': 4864, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 5888, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
-solution: AddRoundKey_hls 4, SubBytes_hls 3, ShiftRows_hls 4, xtime 4, MixColumns_hls 4, Cipher_hls 2
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B76zawbB9sddvH9APclHun1q53iYE', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='python: \'\'\'import math\n\n# Define the target total area (as measured by the sum of contributions from all functions in the call graph)\nTARGET_AREA = 3800\n\n# Data for each function option in the form (area, latency, throughput)\n# Options are indexed starting from 0 as described.\n# Function: AddRoundKey_hls options\nadd_round_key = [\n    (752.6, 34.0, 38.0),\n    (739.4, 31.0, 34.0),\n    (739.4, 31.0, 34.0),\n    (734.6, 31.0, 34.0),\n    (1900.5, 16.0, 18.0)\n]\n\n# Function: SubBytes_hls options\nsub_bytes = [\n    (1889.1, 15.0, 17.0),\n    (831.0, 21.0, 26.0),\n    (825.5, 15.0, 19.0),\n    (1889.1, 15.0, 17.0),\n    (829.0, 15.0, 19.0)\n]\n\n# Function: ShiftRows_hls options\nshift_rows = [\n    (975.6, 19.0, 23.0),\n    (23.9, 0.0, 2.0),\n    (23.9, 0.0, 2.0),\n    (23.9, 0.0, 2.0),\n    (23.9, 0.0, 2.0)\n]\n\n# Function: xtime options\nxtime = [\n    (77.0, 1.0, 2.0),\n    (77.0, 1.0, 2.0),\n    (82.0, 1.0, 2.0),\n    (77.0, 1.0, 2.0),\n    (77.0, 1.0, 2.0)\n]\n\n# Function: MixColumns_hls options\nmix_columns = [\n    (866.6, 0.0, 2.0),\n    (866.6, 0.0, 2.0),\n    (639.9, 3.0, 7.0),\n    (866.6, 0.0, 2.0),\n    (866.6, 0.0, 2.0)\n]\n\n# Function: Cipher_hls options\ncipher = [\n    (4869.2, 194.0, 196.0),\n    (9768.5, 175.0, 183.0),\n    (4869.2, 194.0, 196.0),\n    (8622.0, 202.0, 204.0),\n    (9768.5, 175.0, 183.0)\n]\n\n# According to the call graph in the application, the functions are invoked as follows:\n#  - Cipher_hls is the top-level synthesizable function (called once).\n#  - Within Cipher_hls:\n#      * AddRoundKey_hls is called 3 times.\n#      * SubBytes_hls is called 1 time.\n#      * ShiftRows_hls is called 1 time.\n#      * MixColumns_hls is called 1 time.\n#  - Within MixColumns_hls:\n#      * xtime is called 4 times.\n#\n# We define an approximate aggregated model that sums areas and latencies weighted by call multiplicity.\n# Note: This is a surrogate model for the overall design metrics.\ndef total_area(ar, sb, sr, xt, mc, ci):\n    # Overall area assumed as:\n    #   Area_total = Cipher_area + 3*AddRoundKey_area + SubBytes_area + ShiftRows_area + MixColumns_area + 4*xtime_area\n    return cipher[ci][0] + 3 * add_round_key[ar][0] + sub_bytes[sb][0] + shift_rows[sr][0] + mix_columns[mc][0] + 4 * xtime[xt][0]\n\ndef total_latency(ar, sb, sr, xt, mc, ci):\n    # Overall latency assumed as:\n    #   Latency_total = Cipher_latency + 3*AddRoundKey_latency + SubBytes_latency + ShiftRows_latency + MixColumns_latency + 4*xtime_latency\n    return cipher[ci][1] + 3 * add_round_key[ar][1] + sub_bytes[sb][1] + shift_rows[sr][1] + mix_columns[mc][1] + 4 * xtime[xt][1]\n\n# We now enumerate over all possible combinations.\n# There are:\n#   - 5 options for AddRoundKey_hls (indexed ar)\n#   - 5 options for SubBytes_hls (sb)\n#   - 5 options for ShiftRows_hls (sr)\n#   - 5 options for xtime (xt)\n#   - 5 options for MixColumns_hls (mc)\n#   - 5 options for Cipher_hls (ci)\n#\n# Total combinations: 5^6 = 15625, which is tractable.\nbest_obj = float(\'inf\')\nbest_config = None\n\n# We need to balance latency minimization with area closeness.\n# Define an objective function: f = total_latency + alpha * abs(total_area - TARGET_AREA)\n# Since total_latency is in the order of hundreds and total_area in thousands, choose alpha accordingly.\n# We set alpha = 1.0 for initial weighting.\nalpha = 1.0\n\nfor ar in range(len(add_round_key)):\n    for sb in range(len(sub_bytes)):\n        for sr in range(len(shift_rows)):\n            for xt in range(len(xtime)):\n                for mc in range(len(mix_columns)):\n                    for ci in range(len(cipher)):\n                        area_val = total_area(ar, sb, sr, xt, mc, ci)\n                        lat_val = total_latency(ar, sb, sr, xt, mc, ci)\n                        obj = lat_val + alpha * abs(area_val - TARGET_AREA)\n                        if obj < best_obj:\n                            best_obj = obj\n                            best_config = (ar, sb, sr, xt, mc, ci)\n\nprint("Best configuration:")\nprint("AddRoundKey_hls option", best_config[0])\nprint("SubBytes_hls option", best_config[1])\nprint("ShiftRows_hls option", best_config[2])\nprint("xtime option", best_config[3])\nprint("MixColumns_hls option", best_config[4])\nprint("Cipher_hls option", best_config[5])\nprint("Total area =", total_area(*best_config))\nprint("Total latency =", total_latency(*best_config))\nprint("Objective value =", best_obj)\n\'\'\'', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1741034874, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=7356, prompt_tokens=1753, total_tokens=9109, prompt_tokens_details={'cached_tokens': 1664, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 5888, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+python: '''import math
+
+# Define the target total area (as measured by the sum of contributions from all functions in the call graph)
+TARGET_AREA = 3800
+
+# Data for each function option in the form (area, latency, throughput)
+# Options are indexed starting from 0 as described.
+# Function: AddRoundKey_hls options
+add_round_key = [
+    (752.6, 34.0, 38.0),
+    (739.4, 31.0, 34.0),
+    (739.4, 31.0, 34.0),
+    (734.6, 31.0, 34.0),
+    (1900.5, 16.0, 18.0)
+]
+
+# Function: SubBytes_hls options
+sub_bytes = [
+    (1889.1, 15.0, 17.0),
+    (831.0, 21.0, 26.0),
+    (825.5, 15.0, 19.0),
+    (1889.1, 15.0, 17.0),
+    (829.0, 15.0, 19.0)
+]
+
+# Function: ShiftRows_hls options
+shift_rows = [
+    (975.6, 19.0, 23.0),
+    (23.9, 0.0, 2.0),
+    (23.9, 0.0, 2.0),
+    (23.9, 0.0, 2.0),
+    (23.9, 0.0, 2.0)
+]
+
+# Function: xtime options
+xtime = [
+    (77.0, 1.0, 2.0),
+    (77.0, 1.0, 2.0),
+    (82.0, 1.0, 2.0),
+    (77.0, 1.0, 2.0),
+    (77.0, 1.0, 2.0)
+]
+
+# Function: MixColumns_hls options
+mix_columns = [
+    (866.6, 0.0, 2.0),
+    (866.6, 0.0, 2.0),
+    (639.9, 3.0, 7.0),
+    (866.6, 0.0, 2.0),
+    (866.6, 0.0, 2.0)
+]
+
+# Function: Cipher_hls options
+cipher = [
+    (4869.2, 194.0, 196.0),
+    (9768.5, 175.0, 183.0),
+    (4869.2, 194.0, 196.0),
+    (8622.0, 202.0, 204.0),
+    (9768.5, 175.0, 183.0)
+]
+
+# According to the call graph in the application, the functions are invoked as follows:
+#  - Cipher_hls is the top-level synthesizable function (called once).
+#  - Within Cipher_hls:
+#      * AddRoundKey_hls is called 3 times.
+#      * SubBytes_hls is called 1 time.
+#      * ShiftRows_hls is called 1 time.
+#      * MixColumns_hls is called 1 time.
+#  - Within MixColumns_hls:
+#      * xtime is called 4 times.
+#
+# We define an approximate aggregated model that sums areas and latencies weighted by call multiplicity.
+# Note: This is a surrogate model for the overall design metrics.
+def total_area(ar, sb, sr, xt, mc, ci):
+    # Overall area assumed as:
+    #   Area_total = Cipher_area + 3*AddRoundKey_area + SubBytes_area + ShiftRows_area + MixColumns_area + 4*xtime_area
+    return cipher[ci][0] + 3 * add_round_key[ar][0] + sub_bytes[sb][0] + shift_rows[sr][0] + mix_columns[mc][0] + 4 * xtime[xt][0]
+
+def total_latency(ar, sb, sr, xt, mc, ci):
+    # Overall latency assumed as:
+    #   Latency_total = Cipher_latency + 3*AddRoundKey_latency + SubBytes_latency + ShiftRows_latency + MixColumns_latency + 4*xtime_latency
+    return cipher[ci][1] + 3 * add_round_key[ar][1] + sub_bytes[sb][1] + shift_rows[sr][1] + mix_columns[mc][1] + 4 * xtime[xt][1]
+
+# We now enumerate over all possible combinations.
+# There are:
+#   - 5 options for AddRoundKey_hls (indexed ar)
+#   - 5 options for SubBytes_hls (sb)
+#   - 5 options for ShiftRows_hls (sr)
+#   - 5 options for xtime (xt)
+#   - 5 options for MixColumns_hls (mc)
+#   - 5 options for Cipher_hls (ci)
+#
+# Total combinations: 5^6 = 15625, which is tractable.
+best_obj = float('inf')
+best_config = None
+
+# We need to balance latency minimization with area closeness.
+# Define an objective function: f = total_latency + alpha * abs(total_area - TARGET_AREA)
+# Since total_latency is in the order of hundreds and total_area in thousands, choose alpha accordingly.
+# We set alpha = 1.0 for initial weighting.
+alpha = 1.0
+
+for ar in range(len(add_round_key)):
+    for sb in range(len(sub_bytes)):
+        for sr in range(len(shift_rows)):
+            for xt in range(len(xtime)):
+                for mc in range(len(mix_columns)):
+                    for ci in range(len(cipher)):
+                        area_val = total_area(ar, sb, sr, xt, mc, ci)
+                        lat_val = total_latency(ar, sb, sr, xt, mc, ci)
+                        obj = lat_val + alpha * abs(area_val - TARGET_AREA)
+                        if obj < best_obj:
+                            best_obj = obj
+                            best_config = (ar, sb, sr, xt, mc, ci)
+
+print("Best configuration:")
+print("AddRoundKey_hls option", best_config[0])
+print("SubBytes_hls option", best_config[1])
+print("ShiftRows_hls option", best_config[2])
+print("xtime option", best_config[3])
+print("MixColumns_hls option", best_config[4])
+print("Cipher_hls option", best_config[5])
+print("Total area =", total_area(*best_config))
+print("Total latency =", total_latency(*best_config))
+print("Objective value =", best_obj)
+'''
+Prompt:  The output of the script is: 
+Best configuration:
+AddRoundKey_hls option 3
+SubBytes_hls option 2
+ShiftRows_hls option 1
+xtime option 0
+MixColumns_hls option 2
+Cipher_hls option 0
+Total area = 8870.3
+Total latency = 309.0
+Objective value = 5379.299999999999
+
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-B770hgeN6nRDW8yWu0vLsExR2IAJC', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='solution: AddRoundKey_hls 3, SubBytes_hls 2, ShiftRows_hls 1, xtime 0, MixColumns_hls 2, Cipher_hls 0', role='assistant', function_call=None, tool_calls=None, refusal=None))], created=1741034943, model='o3-mini-2025-01-31', object='chat.completion', system_fingerprint='fp_42bfad963b', usage=CompletionUsage(completion_tokens=1524, prompt_tokens=3304, total_tokens=4828, prompt_tokens_details={'cached_tokens': 1792, 'audio_tokens': 0}, completion_tokens_details={'reasoning_tokens': 1472, 'audio_tokens': 0, 'accepted_prediction_tokens': 0, 'rejected_prediction_tokens': 0}), service_tier='default')
+solution: AddRoundKey_hls 3, SubBytes_hls 2, ShiftRows_hls 1, xtime 0, MixColumns_hls 2, Cipher_hls 0
 DONE!
 Logging results in  outputs_Cipher_o3-mini_4/Cipher.log
 

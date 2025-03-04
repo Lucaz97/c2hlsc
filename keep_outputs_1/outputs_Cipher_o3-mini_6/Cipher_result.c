@@ -42,158 +42,121 @@ static const uint8_t Rcon[11] = {
 #define getSBoxValue(num) (sbox[(num)])
 
 
-void AddRoundKey_hls(uint8_t round, uint8_t state[4][4], const uint8_t RoundKey[176])
-{
-  int base = round * 16;
-  state[0][0] ^= RoundKey[base + 0];
-  state[0][1] ^= RoundKey[base + 1];
-  state[0][2] ^= RoundKey[base + 2];
-  state[0][3] ^= RoundKey[base + 3];
-  state[1][0] ^= RoundKey[base + 4];
-  state[1][1] ^= RoundKey[base + 5];
-  state[1][2] ^= RoundKey[base + 6];
-  state[1][3] ^= RoundKey[base + 7];
-  state[2][0] ^= RoundKey[base + 8];
-  state[2][1] ^= RoundKey[base + 9];
-  state[2][2] ^= RoundKey[base + 10];
-  state[2][3] ^= RoundKey[base + 11];
-  state[3][0] ^= RoundKey[base + 12];
-  state[3][1] ^= RoundKey[base + 13];
-  state[3][2] ^= RoundKey[base + 14];
-  state[3][3] ^= RoundKey[base + 15];
+static void AddRoundKey_hls(uint8_t round, state_t state, const round_t RoundKey) {
+  #pragma HLS INLINE
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=1
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=2
+  
+  const uint8_t base = round << 4;
+  #pragma HLS BIND_OP variable=base op=add impl=fabric
+  
+  for (uint8_t i = 0; i < 4; ++i) {
+    #pragma HLS UNROLL yes
+    const uint8_t row_offset = base + (i << 2);
+    #pragma HLS BIND_OP variable=row_offset op=add impl=fabric
+    
+    for (uint8_t j = 0; j < 4; ++j) {
+      #pragma HLS UNROLL yes
+      #pragma HLS BIND_OP variable=state op=xor impl=fabric
+      state[i][j] ^= RoundKey[row_offset + j];
+    }
+  }
 }
 
-static void AddRoundKey(uint8_t round, state_t *state, const round_t *RoundKey)
-{
+static void AddRoundKey(uint8_t round, state_t *state, const round_t *RoundKey) {
   AddRoundKey_hls(round, *state, *RoundKey);
 }
 
-static void SubBytes_hls(uint8_t state[4][4])
-{
-  // Flatten the loop and fully unroll it to minimize latency.
-  uint8_t k;
-  #pragma hls_unroll yes
-  for (k = 0; k < 16; k++)
-  {
-    // Recover the two-dimensional indices from the flattened index.
-    uint8_t row = k % 4;
-    uint8_t col = k / 4;
-    state[row][col] = sbox[state[row][col]];
+static void SubBytes_hls(state_t state) {
+  #pragma HLS array_partition variable=state complete
+  for (int i = 0; i < 4; ++i) {
+    #pragma HLS unroll
+    for (int j = 0; j < 4; ++j) {
+      #pragma HLS unroll
+      state[j][i] = sbox[state[j][i]];
+    }
   }
 }
 
-static void SubBytes(state_t *state)
-{
+static void SubBytes(state_t *state) {
   SubBytes_hls(*state);
 }
 
-void ShiftRows_hls(uint8_t state[4][4])
-{
-    // This version is optimized for minimal latency by explicitly coding 
-    // the row shifts without any loops. This avoids loop overhead and lets 
-    // the HLS tool schedule assignments concurrently where possible.
-    #pragma HLS inline
+static void ShiftRows_hls(state_t state) {
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=1
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=2
+  #pragma HLS latency min=0 max=0
+  #pragma HLS pipeline II=1
 
-    uint8_t temp;
+  // Atomic read all source elements first
+  const uint8_t src[12] = {
+      state[0][1], state[1][1], state[2][1], state[3][1],  // Column 1
+      state[0][2], state[1][2], state[2][2], state[3][2],  // Column 2
+      state[0][3], state[1][3], state[2][3], state[3][3]   // Column 3
+  };
 
-    // Rotate second column (index 1) upward by one.
-    temp = state[0][1];
-    state[0][1] = state[1][1];
-    state[1][1] = state[2][1];
-    state[2][1] = state[3][1];
-    state[3][1] = temp;
-    
-    // For third column (index 2), swap top and bottom pairs.
-    temp = state[0][2];
-    state[0][2] = state[2][2];
-    state[2][2] = temp;
-
-    temp = state[1][2];
-    state[1][2] = state[3][2];
-    state[3][2] = temp;
-    
-    // For fourth column (index 3), perform a right circular shift by one.
-    temp = state[0][3];
-    state[0][3] = state[3][3];
-    state[3][3] = state[2][3];
-    state[2][3] = state[1][3];
-    state[1][3] = temp;
+  // Single-cycle parallel write pattern
+  state[0][1] = src[1]; state[1][1] = src[2]; state[2][1] = src[3]; state[3][1] = src[0];
+  state[0][2] = src[6]; state[2][2] = src[4]; state[1][2] = src[7]; state[3][2] = src[5];
+  state[0][3] = src[11]; state[3][3] = src[10]; state[2][3] = src[9]; state[1][3] = src[8];
 }
 
-static void ShiftRows(state_t *state)
-{
-    ShiftRows_hls(*state);
+static void ShiftRows(state_t *state) {
+  ShiftRows_hls(*state);
 }
 
-static uint8_t xtime(uint8_t x)
-{
-    // Optimize for latency by enforcing inlining.
-    #pragma HLS inline
-    return (x << 1) ^ (((x >> 7) & 1) * 0x1b);
+static uint8_t xtime(uint8_t x) {
+  // Optimized for latency using bitwise selection instead of multiplication
+  return (x << 1) ^ (0x1b & (-(x >> 7)));
 }
 
-void MixColumns_hls(uint8_t state[4][4])
-{
-  uint8_t i;
-  uint8_t Tmp;
-  uint8_t Tm;
-  uint8_t t;
-  
-  // Pipeline the loop with minimal initiation interval to reduce area
-  #pragma hls_pipeline_init_interval 1
-  for (i = 0; i < 4; i++)
-  {
-    t = state[i][0];
-    Tmp = state[i][0] ^ state[i][1] ^ state[i][2] ^ state[i][3];
+static void MixColumns_hls(state_t state) {
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=1
+  #pragma HLS ARRAY_PARTITION variable=state complete dim=2
+  for (uint8_t i = 0; i < 4; ++i) {
+    #pragma HLS UNROLL
+    const uint8_t t = state[i][0];
+    const uint8_t Tmp = state[i][0] ^ state[i][1] ^ state[i][2] ^ state[i][3];
     
-    Tm = state[i][0] ^ state[i][1];
-    Tm = xtime(Tm);
-    state[i][0] ^= Tm ^ Tmp;
-    
-    Tm = state[i][1] ^ state[i][2];
-    Tm = xtime(Tm);
-    state[i][1] ^= Tm ^ Tmp;
-    
-    Tm = state[i][2] ^ state[i][3];
-    Tm = xtime(Tm);
-    state[i][2] ^= Tm ^ Tmp;
-    
-    Tm = state[i][3] ^ t;
-    Tm = xtime(Tm);
-    state[i][3] ^= Tm ^ Tmp;
+    // Parallel computation of all transformation terms
+    const uint8_t Tm0 = xtime(state[i][0] ^ state[i][1]);
+    const uint8_t Tm1 = xtime(state[i][1] ^ state[i][2]);
+    const uint8_t Tm2 = xtime(state[i][2] ^ state[i][3]);
+    const uint8_t Tm3 = xtime(state[i][3] ^ t);
+
+    // Parallel state updates
+    state[i][0] ^= Tm0 ^ Tmp;
+    state[i][1] ^= Tm1 ^ Tmp;
+    state[i][2] ^= Tm2 ^ Tmp;
+    state[i][3] ^= Tm3 ^ Tmp;
   }
 }
 
-static void MixColumns(state_t *state)
-{
+static void MixColumns(state_t *state) {
   MixColumns_hls(*state);
 }
 
-void Cipher_hls(uint8_t state[4][4], const uint8_t RoundKey[176])
+static void Cipher_hls(state_t state, const round_t RoundKey)
 {
-    uint8_t round = 0;
+  AddRoundKey_hls(0, state, RoundKey);
 
-    // Initial round: add the first round key.
-    AddRoundKey_hls(0, state, RoundKey);
-
-    // Pipeline the round loop to reduce latency while keeping area low.
-    ROUND_LOOP: for (round = 1; round < 10; ++round) {
-        #pragma hls_pipeline_init_interval 1
-        SubBytes_hls(state);
-        ShiftRows_hls(state);
-        MixColumns_hls(state);
-        AddRoundKey_hls(round, state, RoundKey);
-    }
-
-    // Final round (round 10): without MixColumns.
+  // Partial unroll with explicit trip count
+  #pragma HLS loop_tripcount min 10 max 10
+  #pragma HLS unroll factor=2
+  for (uint8_t round = 1;; ++round) {
     SubBytes_hls(state);
     ShiftRows_hls(state);
-    AddRoundKey_hls(10, state, RoundKey);
+    if (round == 10) break;
+    MixColumns_hls(state);
+    AddRoundKey_hls(round, state, RoundKey);
+  }
+
+  AddRoundKey_hls(10, state, RoundKey);
 }
 
 static void Cipher(state_t *state, const round_t *RoundKey)
 {
-  Cipher_hls((*state), (*RoundKey));
+  Cipher_hls(*state, *RoundKey);
 }
 int main()
 {

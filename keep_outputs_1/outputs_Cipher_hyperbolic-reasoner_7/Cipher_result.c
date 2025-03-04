@@ -86,11 +86,12 @@ static void AddRoundKey(uint8_t round, state_t *state, const round_t *RoundKey) 
 }
 
 static void SubBytes_hls(state_t state) {
-  #pragma HLS array_partition variable=state complete dim=0
-  for (int i = 0; i < 4; ++i) {
-    #pragma HLS unroll
-    for (int j = 0; j < 4; ++j) {
-      #pragma HLS unroll
+  uint8_t i;
+  uint8_t j;
+  for (i = 0; i < 4; ++i) {
+    #pragma HLS unroll yes
+    for (j = 0; j < 4; ++j) {
+      #pragma HLS unroll yes
       state[j][i] = sbox[state[j][i]];
     }
   }
