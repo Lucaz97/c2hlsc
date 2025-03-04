@@ -45,29 +45,21 @@ void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state,
 void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
 void sha256_transform(state_t *state, data_t data[]);
 
-void sha256_transform_hls(state_t state, data_t data)
-{
-  unsigned int a;
-  unsigned int b;
-  unsigned int c;
-  unsigned int d;
-  unsigned int e;
-  unsigned int f;
-  unsigned int g;
-  unsigned int h;
-  unsigned int i;
-  unsigned int j;
-  unsigned int t1;
-  unsigned int t2;
+void sha256_transform_hls(state_t state, data_t data) {
+  unsigned int a, b, c, d, e, f, g, h, i, j, t1, t2;
   unsigned int m[64];
+  
+  // Fully unroll initial message expansion loop
+  for (i = 0, j = 0; i < 16; ++i, j += 4) {
+    #pragma HLS unroll yes
+    m[i] = ((data[j] << 24) | (data[j+1] << 16) | (data[j+2] << 8) | data[j+3]);
+  }
 
-  // Partially unroll the first loop (unroll factor of 1, no unrolling)
-  for (i = 0, j = 0; i < 16; ++i, j += 4)
-    m[i] = ((data[j] << 24) | (data[j + 1] << 16)) | ((data[j + 2] << 8)) | data[j + 3];
-
-  // Partially unroll the second loop (unroll factor of 1, no unrolling)
-  for (; i < 64; ++i)
-    m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
+  // Pipeline the message schedule expansion loop
+  for (; i < 64; ++i) {
+    #pragma HLS pipeline II=1
+    m[i] = SIG1(m[i-2]) + m[i-7] + SIG0(m[i-15]) + m[i-16];
+  }
 
   a = state[0];
   b = state[1];
@@ -78,12 +70,11 @@ void sha256_transform_hls(state_t state, data_t data)
   g = state[6];
   h = state[7];
 
-  // Pipeline the main computation loop with an initiation interval of 1
-  #pragma hls_pipeline_init_interval 1
-  for (i = 0; i < 64; ++i)
-  {
-    t1 = h + EP1(e) + CH(e, f, g) + k[i] + m[i];
-    t2 = EP0(a) + MAJ(a, b, c);
+  // Pipeline the main compression loop with maximum throughput
+  for (i = 0; i < 64; ++i) {
+    #pragma HLS pipeline II=1
+    t1 = h + EP1(e) + CH(e,f,g) + k[i] + m[i];
+    t2 = EP0(a) + MAJ(a,b,c);
     h = g;
     g = f;
     f = e;
@@ -104,32 +95,30 @@ void sha256_transform_hls(state_t state, data_t data)
   state[7] += h;
 }
 
-void sha256_transform(state_t *state, data_t *data)
-{
+void sha256_transform(state_t *state, data_t *data) {
   sha256_transform_hls(*state, *data);
 }
 
-void sha256_update_hls(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
-{
-  int i;
-  #pragma HLS PIPELINE II=1
-  for (i = 0; i < len; ++i)
-  {
-    #pragma HLS UNROLL
-    data_int[*datalen_int] = data[i];
-    (*datalen_int)++;
-    if ((*datalen_int) == 64)
-    {
-      sha256_transform_hls(state, data_int);
-      *bitlen_int += 512;
-      *datalen_int = 0;
+void sha256_update_hls(data_t data_int, unsigned int* datalen_int, state_t state, unsigned long long int* bitlen_int, data_t data, size_t len) {
+    unsigned int local_datalen = *datalen_int;
+    
+    #pragma hls_pipeline_init_interval 1
+    for (int i = 0; i < len; ++i) {
+        #pragma hls_unroll yes
+        data_int[local_datalen] = data[i];
+        local_datalen++;
+
+        if (local_datalen == 64) {
+            sha256_transform_hls(state, data_int);
+            *bitlen_int += 512;
+            local_datalen = 0;
+        }
     }
-  }
+    *datalen_int = local_datalen;
 }
 
-void sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t *data, size_t len)
-{
-  sha256_update_hls(*data_int, datalen_int, *state, bitlen_int, *data, len);
+void sha256_update(data_t *data_int, unsigned int* datalen_int, state_t *state, unsigned long long int* bitlen_int, data_t *data, size_t len) {
+    sha256_update_hls(*data_int, datalen_int, *state, bitlen_int, *data, len);
 }
 int main()
 {

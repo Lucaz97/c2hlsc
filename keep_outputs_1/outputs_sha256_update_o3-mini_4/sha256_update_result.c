@@ -45,137 +45,82 @@ void sha256_update(data_t *data_int, unsigned int * datalen_int, state_t *state,
 void sha256_final(SHA256_CTX *ctx, unsigned char hash[]);
 void sha256_transform(state_t *state, data_t data[]);
 
-void sha256_transform_hls(unsigned int state[8], unsigned char data[64])
-{
-    unsigned int a, b, c, d, e, f, g, h;
-    unsigned int t1, t2;
-    unsigned int m[64];
-    unsigned int i, j;
+void sha256_transform_hls(state_t state, data_t data) {
+  unsigned int a, b, c, d, e, f, g, h, i, j, t1, t2;
+  unsigned int m[64];
+  
+  // Fully unroll initial message expansion loop
+  for (i = 0, j = 0; i < 16; ++i, j += 4) {
+    #pragma HLS unroll yes
+    m[i] = ((data[j] << 24) | (data[j+1] << 16) | (data[j+2] << 8) | data[j+3]);
+  }
 
-    // Partition the message schedule array to allow parallel access
-    #pragma HLS array_partition variable=m complete
+  // Pipeline the message schedule expansion loop
+  for (; i < 64; ++i) {
+    #pragma HLS pipeline II=1
+    m[i] = SIG1(m[i-2]) + m[i-7] + SIG0(m[i-15]) + m[i-16];
+  }
 
-    // Fully unroll the first loop to reduce latency
-    #pragma hls_unroll yes
-    for (i = 0, j = 0; i < 16; ++i, j += 4)
-        m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | data[j + 3];
+  a = state[0];
+  b = state[1];
+  c = state[2];
+  d = state[3];
+  e = state[4];
+  f = state[5];
+  g = state[6];
+  h = state[7];
 
-    // Pipeline the second loop with an initiation interval of 1 for latency optimization
-    #pragma hls_pipeline_init_interval 1
-    for (; i < 64; ++i)
-        m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
+  // Pipeline the main compression loop with maximum throughput
+  for (i = 0; i < 64; ++i) {
+    #pragma HLS pipeline II=1
+    t1 = h + EP1(e) + CH(e,f,g) + k[i] + m[i];
+    t2 = EP0(a) + MAJ(a,b,c);
+    h = g;
+    g = f;
+    f = e;
+    e = d + t1;
+    d = c;
+    c = b;
+    b = a;
+    a = t1 + t2;
+  }
 
-    a = state[0];
-    b = state[1];
-    c = state[2];
-    d = state[3];
-    e = state[4];
-    f = state[5];
-    g = state[6];
-    h = state[7];
-
-    // Pipeline the compression loop with an initiation interval of 1 to further reduce latency
-    #pragma hls_pipeline_init_interval 1
-    for (i = 0; i < 64; ++i)
-    {
-        t1 = h + EP1(e) + CH(e, f, g) + k[i] + m[i];
-        t2 = EP0(a) + MAJ(a, b, c);
-        h = g;
-        g = f;
-        f = e;
-        e = d + t1;
-        d = c;
-        c = b;
-        b = a;
-        a = t1 + t2;
-    }
-
-    state[0] += a;
-    state[1] += b;
-    state[2] += c;
-    state[3] += d;
-    state[4] += e;
-    state[5] += f;
-    state[6] += g;
-    state[7] += h;
+  state[0] += a;
+  state[1] += b;
+  state[2] += c;
+  state[3] += d;
+  state[4] += e;
+  state[5] += f;
+  state[6] += g;
+  state[7] += h;
 }
 
-void sha256_transform(state_t *state, data_t data[])
-{
-    sha256_transform_hls(*state, data[0]);
+void sha256_transform(state_t *state, data_t *data) {
+  sha256_transform_hls(*state, *data);
 }
 
-void sha256_update_hls(unsigned char data_int[64],
-                       unsigned int *datalen_int,
-                       unsigned int state[8],
-                       unsigned long long int *bitlen_int,
-                       unsigned char data[64],
-                       size_t len)
-{
-    size_t i = 0;
+void sha256_update_hls(data_t data_int, unsigned int* datalen_int, state_t state, unsigned long long int* bitlen_int, data_t data, size_t len) {
     unsigned int local_datalen = *datalen_int;
-
-    // First, fill the current block if there's not enough data yet.
-    if (len >= (64 - local_datalen)) {
-        // Copy bytes to complete the current block.
-        size_t n = 64 - local_datalen;
-#pragma HLS pipeline_init_interval 1
-        for (int j = 0; j < n; j++) {
-            data_int[local_datalen + j] = data[i + j];
-        }
-        i += n;
-        local_datalen = 64;
-        // Process the full block.
-        sha256_transform_hls(state, data_int);
-        *bitlen_int += 512;
-        local_datalen = 0;
-    }
-    else {
-        // Not enough bytes to complete a block: simply copy and update.
-#pragma HLS pipeline_init_interval 1
-        for (; i < len; i++) {
-            data_int[local_datalen] = data[i];
-            local_datalen++;
-        }
-        *datalen_int = local_datalen;
-        return;
-    }
-
-    // Process as many complete 64 byte blocks as possible.
-    while ((i + 63) < len) {
-        // Copy a full block.
-#pragma HLS pipeline_init_interval 1
-        for (int j = 0; j < 64; j++) {
-#pragma HLS unroll yes
-            data_int[j] = data[i + j];
-        }
-        sha256_transform_hls(state, data_int);
-        *bitlen_int += 512;
-        i += 64;
-    }
-
-    // Copy any remaining bytes into data_int.
-#pragma HLS pipeline_init_interval 1
-    for (; i < len; i++) {
+    
+    #pragma HLS ARRAY_PARTITION variable=data_int complete dim=1
+    #pragma HLS PIPELINE II=1
+    for (int i = 0; i < len; ++i) {
+        #pragma HLS LOOP_TRIPCOUNT min=1 max=64
         data_int[local_datalen] = data[i];
-        local_datalen++;
+        
+        unsigned int next_datalen = local_datalen + 1;
+        if (next_datalen == 64) {
+            sha256_transform_hls(state, data_int);
+            *bitlen_int += 512;
+            next_datalen = 0;
+        }
+        local_datalen = next_datalen;
     }
     *datalen_int = local_datalen;
 }
 
-void sha256_update(data_t *data_int,
-                   unsigned int *datalen_int,
-                   state_t *state,
-                   unsigned long long int *bitlen_int,
-                   data_t *data,
-                   size_t len)
-{
-  sha256_update_hls((*data_int),
-                    datalen_int,
-                    (*state),
-                    bitlen_int,
-                    (*data),
-                    len);
+void sha256_update(data_t *data_int, unsigned int* datalen_int, state_t *state, unsigned long long int* bitlen_int, data_t *data, size_t len) {
+    sha256_update_hls(*data_int, datalen_int, *state, bitlen_int, *data, len);
 }
 int main()
 {
