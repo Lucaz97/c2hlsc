@@ -718,7 +718,8 @@ hatches = ["//", "\\\\", "XX"]
 
 # define number of benchmarks and width of bars
 x = np.arange(len(benchmarks))
-x = x*0.4
+x = x*0.34
+print(x)
 width = 0.10
 
 # benchmarks = ["compute1", "compute2", "compute3", "compute4", "compute5", "compute6", "Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
@@ -738,7 +739,7 @@ for benchmark in benchmarks:
     success_rates.append((deepseek_chat_success_rate, deepseek_reasoner_success_rate, o3_mini_success_rate))
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 # set style
 plt.style.use("seaborn-v0_8-talk")
 
@@ -753,7 +754,7 @@ ax.set_ylabel("Success Rate (%)", fontsize=30)
 ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
 plt.yticks(fontsize=30)
-ax.set_xlim([-0.2, 4.6])
+ax.set_xlim([-0.18, 3.92])
 ax.set_xticklabels(pretty_names, fontsize=25)
 ax.legend(fontsize=30, ncol=3, loc="lower center")
 plt.tight_layout()
@@ -798,7 +799,7 @@ average_latencies = np.array(average_latencies)
 latency_errors = np.array(latency_errors)
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 
 # plot bars side by side
 rects4 = ax.bar(x - width, average_latencies[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
@@ -829,7 +830,7 @@ ax.set_ylabel("Latency [cycles]", fontsize=30)
 ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
 plt.yticks(fontsize=30)
-ax.set_xlim([-0.2, 4.6])
+ax.set_xlim([-0.18, 3.92])
 ax.set_xticklabels(pretty_names, fontsize=25)
 ax.legend(fontsize=30)
 plt.tight_layout()
@@ -887,7 +888,7 @@ average_areas = np.array(average_areas)
 area_errors = np.array(area_errors)
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 
 # plot bars side by side
 rects7 = ax.bar(x - width, average_areas[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
@@ -919,7 +920,7 @@ ax.set_ylabel("Area [um2]", fontsize=30)
 ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
 plt.yticks(fontsize=30)
-ax.set_xlim([-0.2, 4.6])
+ax.set_xlim([-0.18, 3.92])
 ax.set_xticklabels(pretty_names, fontsize=25)
 #ax.legend(fontsize=30)
 plt.tight_layout()
@@ -965,7 +966,7 @@ average_costs = np.array(average_costs)
 cost_errors = np.array(cost_errors)
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 
 # plot bars side by side
 rects10 = ax.bar(x - width, average_costs[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
@@ -995,7 +996,7 @@ rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color
 ax.set_ylabel("Cost [$]", fontsize=30)
 ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-ax.set_xlim([-0.2, 4.6])
+ax.set_xlim([-0.18, 3.92])
 plt.yticks(fontsize=30)
 ax.set_xticklabels(pretty_names, fontsize=25)
 #ax.legend(fontsize=30)
@@ -1080,7 +1081,7 @@ average_times = np.array(average_times)
 # time_errors = np.array(time_errors)
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 
 # plot bars side by side
 rects13 = ax.bar(x - width, average_times[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
@@ -1110,7 +1111,7 @@ rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color
 ax.set_ylabel("Time [min]", fontsize=30)
 ax.set_xlabel("Benchmarks", fontsize=30)
 ax.set_xticks(x)
-ax.set_xlim([-0.2, 4.6])
+ax.set_xlim([-0.18, 3.92])
 plt.yticks(fontsize=30)
 ax.set_xticklabels(pretty_names, fontsize=25)
 #ax.legend(fontsize=30)
@@ -1127,7 +1128,7 @@ plt.savefig("average_time_comparison.pdf")
 model_names = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
 x = np.arange(len(model_names))
 x = x*0.4
-
+print(x)
 deepseek_chat_synthesis_calls = 0
 deepseek_reasoner_synthesis_calls = 0
 o3_mini_synthesis_calls = 0
@@ -1169,7 +1170,7 @@ o3_mini_actions = [o3_mini_synthesis_calls, o3_mini_python_calls, o3_mini_profil
 actions = np.array([deepseek_chat_actions, deepseek_reasoner_actions, o3_mini_actions])
 
 # create the figure and axis
-fig, ax = plt.subplots(figsize=(20, 5))
+fig, ax = plt.subplots(figsize=(17, 5))
 
 # plot bars side by side
 rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="Synthesis")
@@ -1197,12 +1198,13 @@ rects19 = ax.bar(x + 3 * width / 2, actions[:, 2], width, edgecolor="black", col
 #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
 # add labels, title, and legend
-ax.set_ylabel("Calls", fontsize=20)
-ax.set_xlabel("Models", fontsize=20)
+ax.set_ylabel("Calls", fontsize=30)
+ax.set_xlabel("Models", fontsize=30)
 ax.set_xticks(x)
-plt.yticks(fontsize=20)
-ax.set_xticklabels(model_names, fontsize=20)
-ax.legend(fontsize=20)
+plt.yticks(fontsize=30)
+ax.set_xlim([-0.21, 0.92])
+ax.set_xticklabels(model_names, fontsize=30)
+ax.legend(fontsize=30, ncol=2, loc="upper center")
 plt.tight_layout()
 
 # save the plot as pdf
