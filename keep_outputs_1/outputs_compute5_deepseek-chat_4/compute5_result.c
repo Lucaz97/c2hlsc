@@ -24,8 +24,14 @@ int fibonacci(int n)
 
 int odd_sum(int n)
 {
-  int k = (n) / 2; // Number of odd numbers less than n
-  return k * k;    // Sum of the first k odd numbers
+  int sum = 0;
+  #pragma hls_pipeline_init_interval 1
+  for (int i = 1; i < n; i += 2)
+  {
+    sum += i;
+  }
+
+  return sum;
 }
 
 int even_sum(int n)
@@ -47,6 +53,7 @@ void compute5(int n[5])
   int result2;
   int result3;
 
+  #pragma hls_unroll yes
   for (int i = 0; i < 5; i++)
   {
     result0 = fibonacci(n[i]);

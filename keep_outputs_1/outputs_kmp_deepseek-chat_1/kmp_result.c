@@ -21,8 +21,8 @@ void CPF(char pattern[4], int kmpNext[4])
   c1:
   for (q = 1; q < 4; q++)
   {
-    c2:
     #pragma hls_pipeline_init_interval 1
+    c2:
     while ((k > 0) && (pattern[k] != pattern[q]))
     {
       k = kmpNext[q];
@@ -41,11 +41,12 @@ static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_
   int i;
   int q = 0;
 
+  // Pipeline the outer loop to improve throughput
   #pragma hls_pipeline_init_interval 1
   k1:
   for (i = 0; i < 204; i++)
   {
-    #pragma hls_unroll yes
+    // Preserve the original inner while loop logic
     k2:
     while ((q > 0) && (pattern[q] != input[i]))
     {
@@ -66,16 +67,12 @@ static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_
 
 int kmp(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
 {
+  #pragma HLS INLINE
   n_matches[0] = 0;
-
-  // Pipeline the CPF function call
-  #pragma hls_pipeline_init_interval 1
+  #pragma HLS PIPELINE II=1
   CPF(pattern, kmpNext);
-
-  // Pipeline the kmp_process function call
-  #pragma hls_pipeline_init_interval 1
+  #pragma HLS PIPELINE II=1
   kmp_process(pattern, input, kmpNext, n_matches);
-
   return 0;
 }
 int main()

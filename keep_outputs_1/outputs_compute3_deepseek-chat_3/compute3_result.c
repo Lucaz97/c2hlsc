@@ -11,7 +11,7 @@ int fibonacci(int n)
   int b = 1;
   int c;
 
-  #pragma hls_unroll yes
+  #pragma hls_unroll factor=2
   for (int i = 2; i < n; i++)
   {
     c = a + b;
@@ -25,7 +25,7 @@ int fibonacci(int n)
 int odd_sum(int n)
 {
   int sum = 0;
-  #pragma hls_unroll factor=2
+  #pragma hls_unroll factor=4
   #pragma hls_pipeline_init_interval 1
   for (int i = 1; i < n; i += 2)
   {
@@ -54,7 +54,6 @@ int compute3(int n)
   int result2;
   int result3;
 
-  // Unroll loops in child functions if possible
   #pragma hls_unroll yes
   result0 = fibonacci(n);
 

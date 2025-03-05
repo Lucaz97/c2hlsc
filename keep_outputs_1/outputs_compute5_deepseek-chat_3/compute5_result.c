@@ -24,15 +24,9 @@ int fibonacci(int n)
 
 int odd_sum(int n)
 {
-  int k = (n) / 2; // Number of odd numbers less than n
-  return k * k;    // Sum of the first k odd numbers
-}
-
-int even_sum(int n)
-{
   int sum = 0;
   #pragma hls_unroll yes
-  for (int i = 2; i < n; i += 2)
+  for (int i = 1; i < n; i += 2)
   {
     sum += i;
   }
@@ -40,20 +34,44 @@ int even_sum(int n)
   return sum;
 }
 
+int even_sum(int n)
+{
+  int sum = 0;
+  #pragma hls_pipeline_init_interval 1
+  for (int i = 2; i < n; i += 4)
+  {
+    sum += i;
+    sum += i + 2;
+  }
+
+  return sum;
+}
+
 void compute5(int n[5])
 {
-  int result0;
-  int result1;
-  int result2;
-  int result3;
+  int result0[5];
+  int result1[5];
+  int result2[5];
+  int result3[5];
 
+  #pragma hls_unroll yes
   for (int i = 0; i < 5; i++)
   {
-    result0 = fibonacci(n[i]);
-    result1 = odd_sum(result0);
-    result2 = even_sum(n[i]);
-    result3 = fibonacci(result2);
-    n[i] = result3 - result1;
+    result0[i] = fibonacci(n[i]);
+    result2[i] = even_sum(n[i]);
+  }
+
+  #pragma hls_unroll yes
+  for (int i = 0; i < 5; i++)
+  {
+    result1[i] = odd_sum(result0[i]);
+    result3[i] = fibonacci(result2[i]);
+  }
+
+  #pragma hls_unroll yes
+  for (int i = 0; i < 5; i++)
+  {
+    n[i] = result3[i] - result1[i];
   }
 }
 int main()
