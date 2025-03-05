@@ -12,20 +12,17 @@
 
 void CPF(char pattern[4], int kmpNext[4])
 {
-  int k;
-  int q;
-  k = 0;
+  int k = 0;
   kmpNext[0] = 0;
 
   #pragma hls_unroll yes
   c1:
-  for (q = 1; q < 4; q++)
+  for (int q = 1; q < 4; q++)
   {
-    c2:
     #pragma hls_pipeline_init_interval 1
-    while ((k > 0) && (pattern[k] != pattern[q]))
+    if (k > 0 && pattern[k] != pattern[q])
     {
-      k = kmpNext[q];
+      k = kmpNext[k - 1]; // Optimized assignment
     }
 
     if (pattern[k] == pattern[q])
@@ -41,10 +38,12 @@ static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_
   int i;
   int q = 0;
 
+  // Pipeline the outer loop with an initiation interval of 1
   #pragma hls_pipeline_init_interval 1
   k1:
   for (i = 0; i < 204; i++)
   {
+    // Fully unroll the inner while loop to reduce latency
     #pragma hls_unroll yes
     k2:
     while ((q > 0) && (pattern[q] != input[i]))
@@ -67,15 +66,15 @@ static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_
 int kmp(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
 {
   n_matches[0] = 0;
-
-  // Pipeline the CPF function call
-  #pragma hls_pipeline_init_interval 1
+  
+  // Optimize CPF function for latency
+  #pragma hls_unroll yes
   CPF(pattern, kmpNext);
-
-  // Pipeline the kmp_process function call
-  #pragma hls_pipeline_init_interval 1
+  
+  // Optimize kmp_process function for latency
+  #pragma hls_unroll yes
   kmp_process(pattern, input, kmpNext, n_matches);
-
+  
   return 0;
 }
 int main()

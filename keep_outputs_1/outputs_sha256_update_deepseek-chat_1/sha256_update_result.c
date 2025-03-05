@@ -61,13 +61,13 @@ void sha256_transform_hls(state_t state, data_t data)
   unsigned int t2;
   unsigned int m[64];
 
-  // Unroll the first loop to reduce latency
-  #pragma hls_unroll yes
+  // Partially unroll the first loop (factor of 2) to balance latency and area
+  #pragma hls_unroll 2
   for (i = 0, j = 0; i < 16; ++i, j += 4)
-    m[i] = ((data[j] << 24) | (data[j + 1] << 16)) | ((data[j + 2] << 8)) | data[j + 3];
+    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
 
-  // Unroll the second loop to reduce latency
-  #pragma hls_unroll yes
+  // Partially unroll the second loop (factor of 2) to balance latency and area
+  #pragma hls_unroll 2
   for (; i < 64; ++i)
     m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
 
@@ -80,7 +80,7 @@ void sha256_transform_hls(state_t state, data_t data)
   g = state[6];
   h = state[7];
 
-  // Pipeline the main computation loop to reduce latency
+  // Pipeline the main computation loop with an initiation interval of 1 to improve throughput and reduce latency
   #pragma hls_pipeline_init_interval 1
   for (i = 0; i < 64; ++i)
   {
@@ -114,10 +114,9 @@ void sha256_transform(state_t *state, data_t *data)
 void sha256_update_hls(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
 {
   int i;
-  #pragma HLS PIPELINE II=1
+  #pragma hls_unroll yes
   for (i = 0; i < len; ++i)
   {
-    #pragma HLS UNROLL
     data_int[*datalen_int] = data[i];
     (*datalen_int)++;
     if ((*datalen_int) == 64)
