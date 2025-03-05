@@ -31,9 +31,9 @@ int even_sum(int n)
 int compute1(int n)
 {
   int result;
-  #pragma HLS inline
+  #pragma HLS INLINE
   result = odd_factorial(n);
-  #pragma HLS inline
+  #pragma HLS INLINE
   result = even_sum(result);
   return result;
 }

@@ -17,13 +17,12 @@ void CPF(char pattern[4], int kmpNext[4])
   k = 0;
   kmpNext[0] = 0;
 
-  #pragma hls_unroll yes
+  #pragma hls_unroll factor=2
   c1:
   for (q = 1; q < 4; q++)
   {
-    c2:
     #pragma hls_pipeline_init_interval 1
-    while ((k > 0) && (pattern[k] != pattern[q]))
+    if ((k > 0) && (pattern[k] != pattern[q]))
     {
       k = kmpNext[q];
     }
@@ -41,11 +40,11 @@ static void kmp_process(char pattern[4], char input[204], int kmpNext[4], int n_
   int i;
   int q = 0;
 
-  #pragma hls_pipeline_init_interval 1
+  #pragma HLS PIPELINE II=1
   k1:
   for (i = 0; i < 204; i++)
   {
-    #pragma hls_unroll yes
+    #pragma HLS UNROLL factor=4
     k2:
     while ((q > 0) && (pattern[q] != input[i]))
     {
@@ -68,12 +67,10 @@ int kmp(char pattern[4], char input[204], int kmpNext[4], int n_matches[1])
 {
   n_matches[0] = 0;
 
-  // Pipeline the CPF function call
-  #pragma hls_pipeline_init_interval 1
+  // Optimize CPF function call for latency
   CPF(pattern, kmpNext);
 
-  // Pipeline the kmp_process function call
-  #pragma hls_pipeline_init_interval 1
+  // Optimize kmp_process function call for latency
   kmp_process(pattern, input, kmpNext, n_matches);
 
   return 0;
