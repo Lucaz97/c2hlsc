@@ -76,11 +76,13 @@ class Benchmark:
 
         # DESIGN LATENCY
         self.deepseek_chat_latency = 0
+        self.deepseek_chat_latencies = []
         self.min_deepseek_chat_latency = 999999
         self.max_deepseek_chat_latency = 0
 
         # DESIGN AREA
         self.deepseek_chat_area = 0
+        self.deepseek_chat_areas = []
         self.min_deepseek_chat_area = 999999
         self.max_deepseek_chat_area = 0
 
@@ -159,11 +161,13 @@ class Benchmark:
 
         # DESIGN LATENCY
         self.deepseek_reasoner_latency = 0
+        self.deepseek_reasoner_latencies = []
         self.min_deepseek_reasoner_latency = 999999
         self.max_deepseek_reasoner_latency = 0
 
         # DESIGN AREA
         self.deepseek_reasoner_area = 0
+        self.deepseek_reasoner_areas = []
         self.min_deepseek_reasoner_area = 999999
         self.max_deepseek_reasoner_area = 0
 
@@ -242,11 +246,13 @@ class Benchmark:
 
         # DESIGN LATENCY
         self.o3_mini_latency = 0
+        self.o3_mini_latencies = []
         self.min_o3_mini_latency = 999999
         self.max_o3_mini_latency = 0
 
         # DESIGN AREA
         self.o3_mini_area = 0
+        self.o3_mini_areas = []
         self.min_o3_mini_area = 999999
         self.max_o3_mini_area = 0
 
@@ -550,6 +556,7 @@ for folder in folders:
                             if "deepseek-chat" in folder:
                                 benchmark_dict[benchmark].deepseek_chat_success += 1
                                 benchmark_dict[benchmark].deepseek_chat_latency += latency
+                                benchmark_dict[benchmark].deepseek_chat_latencies.append(latency)
                                 benchmark_dict[benchmark].min_deepseek_chat_latency = min(benchmark_dict[benchmark].min_deepseek_chat_latency, latency)
                                 benchmark_dict[benchmark].max_deepseek_chat_latency = max(benchmark_dict[benchmark].max_deepseek_chat_latency, latency)
                                 # print(f"{folder}: {latency}, {benchmark_dict[benchmark].deepseek_chat_latency}, {benchmark_dict[benchmark].min_deepseek_chat_latency}, {benchmark_dict[benchmark].max_deepseek_chat_latency}")
@@ -557,6 +564,7 @@ for folder in folders:
                             if "hyperbolic-reasoner" in folder or "deepseek-reasoner" in folder:
                                 benchmark_dict[benchmark].deepseek_reasoner_success += 1
                                 benchmark_dict[benchmark].deepseek_reasoner_latency += latency
+                                benchmark_dict[benchmark].deepseek_reasoner_latencies.append(latency)
                                 benchmark_dict[benchmark].min_deepseek_reasoner_latency = min(benchmark_dict[benchmark].min_deepseek_reasoner_latency, latency)
                                 benchmark_dict[benchmark].max_deepseek_reasoner_latency = max(benchmark_dict[benchmark].max_deepseek_reasoner_latency, latency)
                                 # print(f"{folder}: {latency}, {benchmark_dict[benchmark].deepseek_reasoner_latency}, {benchmark_dict[benchmark].min_deepseek_reasoner_latency}, {benchmark_dict[benchmark].max_deepseek_reasoner_latency}")
@@ -564,6 +572,7 @@ for folder in folders:
                             if "o3-mini" in folder:
                                 benchmark_dict[benchmark].o3_mini_success += 1
                                 benchmark_dict[benchmark].o3_mini_latency += latency
+                                benchmark_dict[benchmark].o3_mini_latencies.append(latency)
                                 benchmark_dict[benchmark].min_o3_mini_latency = min(benchmark_dict[benchmark].min_o3_mini_latency, latency)
                                 benchmark_dict[benchmark].max_o3_mini_latency = max(benchmark_dict[benchmark].max_o3_mini_latency, latency)
                                 # print(f"{folder}: {latency}, {benchmark_dict[benchmark].o3_mini_latency}, {benchmark_dict[benchmark].min_o3_mini_latency}, {benchmark_dict[benchmark].max_o3_mini_latency}")
@@ -574,18 +583,21 @@ for folder in folders:
 
                             if "deepseek-chat" in folder:
                                 benchmark_dict[benchmark].deepseek_chat_area += area
+                                benchmark_dict[benchmark].deepseek_chat_areas.append(area)
                                 benchmark_dict[benchmark].min_deepseek_chat_area = min(benchmark_dict[benchmark].min_deepseek_chat_area, area)
                                 benchmark_dict[benchmark].max_deepseek_chat_area = max(benchmark_dict[benchmark].max_deepseek_chat_area, area)
                                 # print(f"{folder}: {area}, {benchmark_dict[benchmark].deepseek_chat_area}, {benchmark_dict[benchmark].min_deepseek_chat_area}, {benchmark_dict[benchmark].max_deepseek_chat_area}")
 
                             if "hyperbolic-reasoner" in folder or "deepseek-reasoner" in folder:
                                 benchmark_dict[benchmark].deepseek_reasoner_area += area
+                                benchmark_dict[benchmark].deepseek_reasoner_areas.append(area)
                                 benchmark_dict[benchmark].min_deepseek_reasoner_area = min(benchmark_dict[benchmark].min_deepseek_reasoner_area, area)
                                 benchmark_dict[benchmark].max_deepseek_reasoner_area = max(benchmark_dict[benchmark].max_deepseek_reasoner_area, area)
                                 # print(f"{folder}: {area}, {benchmark_dict[benchmark].deepseek_reasoner_area}, {benchmark_dict[benchmark].min_deepseek_reasoner_area}, {benchmark_dict[benchmark].max_deepseek_reasoner_area}")
 
                             if "o3-mini" in folder:
                                 benchmark_dict[benchmark].o3_mini_area += area
+                                benchmark_dict[benchmark].o3_mini_areas.append(area)
                                 benchmark_dict[benchmark].min_o3_mini_area = min(benchmark_dict[benchmark].min_o3_mini_area, area)
                                 benchmark_dict[benchmark].max_o3_mini_area = max(benchmark_dict[benchmark].max_o3_mini_area, area)
                                 # print(f"{folder}: {area}, {benchmark_dict[benchmark].o3_mini_area}, {benchmark_dict[benchmark].min_o3_mini_area}, {benchmark_dict[benchmark].max_o3_mini_area}")
@@ -719,7 +731,7 @@ hatches = ["//", "\\\\", "XX"]
 # define number of benchmarks and width of bars
 x = np.arange(len(benchmarks))
 x = x*0.34
-print(x)
+# print(x)
 width = 0.10
 
 # benchmarks = ["compute1", "compute2", "compute3", "compute4", "compute5", "compute6", "Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
@@ -1128,7 +1140,7 @@ plt.savefig("average_time_comparison.pdf")
 model_names = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
 x = np.arange(len(model_names))
 x = x*0.4
-print(x)
+# print(x)
 deepseek_chat_synthesis_calls = 0
 deepseek_reasoner_synthesis_calls = 0
 o3_mini_synthesis_calls = 0
@@ -1209,3 +1221,227 @@ plt.tight_layout()
 
 # save the plot as pdf
 plt.savefig("actions_comparison.pdf")
+
+
+####################
+### PLOT WINNERS ###
+####################
+
+models = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
+
+target_area_dict = {
+    "compute1" : 4000, 
+    "compute2" : 4000,
+    "compute3" : 2800,
+    "compute4" : 4000,
+    "compute5" : 8000,
+    "compute6" : 7000,
+    "Cipher" : 3800,
+    "sha256_update" : 40000,
+    "present80_encryptBlock" : 10500,
+    "kmp" : 10000,
+    "filter" : 4200,
+    "needwun" : 10000
+}
+
+winners_dict = {
+    "DeepSeek-V3" : 0,
+    "DeepSeek-R1" : 0,
+    "o3-mini" : 0
+}
+
+import pprint
+
+deepseek_chat_meets_target = 0
+ds_chat_meets_tgt = {b: 0 for b in benchmarks}
+ds_chat_latency_cond = {b: 0 for b in benchmarks}
+ds_chat_second_cond = {b: 0 for b in benchmarks}
+
+deepseek_reasoner_meets_target = 0
+ds_reas_meets_tgt = {b: 0 for b in benchmarks}
+ds_reas_latency_cond = {b: 0 for b in benchmarks}
+ds_reas_second_cond = {b: 0 for b in benchmarks}
+
+o3_mini_meets_target = 0
+o3_meets_tgt = {b: 0 for b in benchmarks}
+o3_mini_latency_cond = {b: 0 for b in benchmarks}
+o3_mini_second_cond = {b: 0 for b in benchmarks}
+
+for benchmark in benchmarks:
+
+    min_latency = 999999
+    min_area = 999999
+
+    for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
+        
+        if deepseek_chat_area < min_area:
+            min_area = deepseek_chat_area
+
+        if deepseek_chat_area < target_area_dict[benchmark]:
+            
+            if benchmark_dict[benchmark].deepseek_chat_latencies[idx] < min_latency:
+                min_latency = benchmark_dict[benchmark].deepseek_chat_latencies[idx]
+
+            deepseek_chat_meets_target += 1
+            ds_chat_meets_tgt[benchmark] += 1
+
+    for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
+
+        if deepseek_reasoner_area < min_area:
+            min_area = deepseek_reasoner_area
+
+        if deepseek_reasoner_area < target_area_dict[benchmark]:
+
+            if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] < min_latency:
+                min_latency = benchmark_dict[benchmark].deepseek_reasoner_latencies[idx]
+
+            ds_reas_meets_tgt[benchmark] +=1
+            deepseek_reasoner_meets_target += 1
+
+    for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
+
+        if o3_mini_area < min_area:
+            min_area = o3_mini_area
+
+        if o3_mini_area < target_area_dict[benchmark]:
+
+            if benchmark_dict[benchmark].o3_mini_latencies[idx] < min_latency:
+                min_latency = benchmark_dict[benchmark].o3_mini_latencies[idx]
+
+            o3_meets_tgt[benchmark] += 1
+            o3_mini_meets_target += 1
+
+    
+
+
+    for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
+
+        if deepseek_chat_area < target_area_dict[benchmark]:
+
+            if benchmark_dict[benchmark].deepseek_chat_latencies[idx] == min_latency:
+
+                ds_chat_latency_cond[benchmark] += 1
+
+        elif min_latency == 999999:
+
+            if deepseek_chat_area == min_area:
+                
+                ds_chat_second_cond[benchmark] += 1
+
+                
+
+    for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
+
+        if deepseek_reasoner_area < target_area_dict[benchmark]:
+
+            if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] == min_latency:
+                
+                ds_reas_latency_cond[benchmark] += 1
+
+        elif min_latency == 999999:
+
+            if deepseek_reasoner_area == min_area:
+                
+                ds_reas_second_cond[benchmark] += 1
+
+
+    for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
+
+        if o3_mini_area < target_area_dict[benchmark]:
+
+            if benchmark_dict[benchmark].o3_mini_latencies[idx] == min_latency:
+                
+                o3_mini_latency_cond[benchmark] += 1
+        
+        elif min_latency == 999999:
+
+            if o3_mini_area == min_area:
+                
+                o3_mini_second_cond[benchmark] += 1
+
+    
+
+import pprint
+
+print(deepseek_chat_meets_target)
+print(deepseek_reasoner_meets_target)
+print(o3_mini_meets_target)
+
+pprint.pprint(ds_chat_meets_tgt)
+pprint.pprint(ds_reas_meets_tgt)
+pprint.pprint(o3_meets_tgt)
+
+pprint.pprint(ds_chat_latency_cond)
+pprint.pprint(ds_reas_latency_cond)
+pprint.pprint(o3_mini_latency_cond)
+
+pprint.pprint(ds_chat_second_cond)
+pprint.pprint(ds_reas_second_cond)
+pprint.pprint(o3_mini_second_cond)
+
+# print in table format with benchmarks as rows and models as columns
+print("Benchmarks\tMeets Target\tMeets Target\tMeets Target\tLatency Cond\tLatency Cond\tLatency Cond\tSecond Cond\tSecond Cond\tSecond Cond")
+
+print("Benchmarks\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini")
+for benchmark in benchmarks:
+    print(f"{benchmark}\t{ds_chat_meets_tgt[benchmark]}\t{ds_reas_meets_tgt[benchmark]}\t{o3_meets_tgt[benchmark]}", end="\t")
+    print(f"{ds_chat_latency_cond[benchmark]}\t{ds_reas_latency_cond[benchmark]}\t{o3_mini_latency_cond[benchmark]}", end="\t")
+    print(f"{ds_chat_second_cond[benchmark]}\t{ds_reas_second_cond[benchmark]}\t{o3_mini_second_cond[benchmark]}")
+
+# add columns 
+
+
+    # deepseek_chat_areas = np.array()
+    # if deepseek_chat_areas:
+    #     print(deepseek_chat_areas)
+    #     print(np.median(deepseek_chat_areas))
+    # # pprint.pprint(benchmark_dict[benchmark].deepseek_reasoner_areas)
+    # # pprint.pprint(benchmark_dict[benchmark].o3_mini_areas)
+    # print()
+
+
+#     candidates = []
+
+#     if benchmark_dict[benchmark].deepseek_chat_area < target_area_dict[benchmark]:
+#         candidates.append(("DeepSeek-V3", benchmark_dict[benchmark].deepseek_chat_latency))
+
+#     if benchmark_dict[benchmark].deepseek_reasoner_area < target_area_dict[benchmark]:
+#         candidates.append(("DeepSeek-R1", benchmark_dict[benchmark].deepseek_reasoner_latency))
+
+#     if benchmark_dict[benchmark].o3_mini_area < target_area_dict[benchmark]:
+#         candidates.append(("o3-mini", benchmark_dict[benchmark].o3_mini_latency))
+
+#     min_latency = 999999
+#     curr_winner = ""
+
+#     if candidates:
+#         # print(f"{benchmark} by latency")
+#         # print(candidates)
+
+#         for candidate in candidates:
+#             if candidate[1] < min_latency:
+
+#                 curr_winner = candidate[0]
+#                 min_latency = candidate[1]
+        
+#     else:
+        
+#         curr_winner = "DeepSeek-V3"
+#         min_area = benchmark_dict[benchmark].deepseek_chat_area
+        
+#         if benchmark_dict[benchmark].deepseek_reasoner_area < min_area:
+#             curr_winner = "DeepSeek-R1"
+#             min_area = benchmark_dict[benchmark].deepseek_reasoner_area
+        
+#         if benchmark_dict[benchmark].o3_mini_area < min_area:
+#             curr_winner = "o3-mini"
+
+#         # print(f"{benchmark} by area")
+#         # print(benchmark_dict[benchmark].deepseek_chat_area, benchmark_dict[benchmark].deepseek_reasoner_area, benchmark_dict[benchmark].o3_mini_area)
+
+#     winners_dict[curr_winner] += 1
+#     print(f"Winner of {benchmark}: {curr_winner}")
+#     print()
+
+# import pprint
+# pprint.pprint(winners_dict)
