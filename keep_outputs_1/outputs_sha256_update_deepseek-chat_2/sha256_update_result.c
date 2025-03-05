@@ -61,13 +61,13 @@ void sha256_transform_hls(state_t state, data_t data)
   unsigned int t2;
   unsigned int m[64];
 
-  // Unroll the first loop to reduce latency
-  #pragma hls_unroll yes
+  // Partially unroll the first loop (unroll factor of 4)
+  #pragma hls_unroll 4
   for (i = 0, j = 0; i < 16; ++i, j += 4)
-    m[i] = ((data[j] << 24) | (data[j + 1] << 16)) | ((data[j + 2] << 8)) | data[j + 3];
+    m[i] = (((data[j] << 24) | (data[j + 1] << 16)) | (data[j + 2] << 8)) | data[j + 3];
 
-  // Unroll the second loop to reduce latency
-  #pragma hls_unroll yes
+  // Partially unroll the second loop (unroll factor of 4)
+  #pragma hls_unroll 4
   for (; i < 64; ++i)
     m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
 
@@ -80,7 +80,7 @@ void sha256_transform_hls(state_t state, data_t data)
   g = state[6];
   h = state[7];
 
-  // Pipeline the main computation loop to reduce latency
+  // Pipeline the main computation loop with an initiation interval of 1
   #pragma hls_pipeline_init_interval 1
   for (i = 0; i < 64; ++i)
   {
@@ -114,19 +114,34 @@ void sha256_transform(state_t *state, data_t *data)
 void sha256_update_hls(data_t data_int, unsigned int *datalen_int, state_t state, unsigned long long int *bitlen_int, data_t data, size_t len)
 {
   int i;
-  #pragma HLS PIPELINE II=1
+  unsigned int temp_datalen = *datalen_int; // Use a local variable to reduce dependencies
+  data_t temp_data; // Temporary buffer for storing data
+
+  // Copy existing data to the temporary buffer
+  for (i = 0; i < temp_datalen; ++i) {
+    temp_data[i] = data_int[i];
+  }
+
+  // Process new data
   for (i = 0; i < len; ++i)
   {
-    #pragma HLS UNROLL
-    data_int[*datalen_int] = data[i];
-    (*datalen_int)++;
-    if ((*datalen_int) == 64)
+    temp_data[temp_datalen] = data[i];
+    temp_datalen++;
+
+    if (temp_datalen == 64)
     {
-      sha256_transform_hls(state, data_int);
+      sha256_transform_hls(state, temp_data);
       *bitlen_int += 512;
-      *datalen_int = 0;
+      temp_datalen = 0;
     }
   }
+
+  // Copy remaining data back to the original buffer
+  for (i = 0; i < temp_datalen; ++i) {
+    data_int[i] = temp_data[i];
+  }
+
+  *datalen_int = temp_datalen; // Update the original datalen
 }
 
 void sha256_update(data_t *data_int, unsigned int *datalen_int, state_t *state, unsigned long long int *bitlen_int, data_t *data, size_t len)
