@@ -7,7 +7,6 @@
 int odd_factorial(int n)
 {
   int res = 1;
-  #pragma hls_unroll factor=2
   #pragma hls_pipeline_init_interval 1
   for (int i = 1; i < n; i += 2)
   {
@@ -32,9 +31,9 @@ int even_sum(int n)
 int compute1(int n)
 {
   int result;
-  #pragma HLS inline
+  #pragma HLS INLINE
   result = odd_factorial(n);
-  #pragma HLS inline
+  #pragma HLS INLINE
   result = even_sum(result);
   return result;
 }

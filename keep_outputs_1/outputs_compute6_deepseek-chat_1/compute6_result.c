@@ -4,6 +4,17 @@
 #include <stdint.h>
 #include <stdio.h>
 
+int odd_factorial(int n)
+{
+  int res = 1;
+  #pragma hls_pipeline_init_interval 1
+  for (int i = 1; i < n; i += 2)
+  {
+    res = res * i;
+  }
+
+  return res;
+}
 
 int fibonacci(int n)
 {
@@ -22,22 +33,10 @@ int fibonacci(int n)
   return c;
 }
 
-int odd_sum(int n)
-{
-  int sum = 0;
-  #pragma hls_pipeline_init_interval 1
-  for (int i = 1; i < n; i += 2)
-  {
-    sum += i;
-  }
-
-  return sum;
-}
-
 int even_sum(int n)
 {
   int sum = 0;
-  #pragma hls_unroll yes
+  #pragma hls_pipeline_init_interval 1
   for (int i = 2; i < n; i += 2)
   {
     sum += i;
@@ -46,7 +45,7 @@ int even_sum(int n)
   return sum;
 }
 
-void compute5(int n[5])
+void compute6(int n[5])
 {
   int result0;
   int result1;
@@ -56,17 +55,17 @@ void compute5(int n[5])
   #pragma hls_unroll yes
   for (int i = 0; i < 5; i++)
   {
-    result0 = fibonacci(n[i]);
-    result1 = odd_sum(result0);
-    result2 = even_sum(n[i]);
-    result3 = fibonacci(result2);
-    n[i] = result3 - result1;
+    result0 = odd_factorial(n[i]);
+    result1 = fibonacci(n[i]);
+    result2 = even_sum(result0 - result1);
+    result3 = even_sum(result2 - result1);
+    n[i] = result3;
   }
 }
 int main()
 {
-  unsigned int n[] = {6, 7, 8, 9, 10};
-  compute5((int *) n);
+  unsigned int n[] = {5, 6, 7, 8, 9};
+  compute6((int *) n);
   for (int _i = 0; _i < 5; _i++)
   {
     printf("%d ", n[_i]);

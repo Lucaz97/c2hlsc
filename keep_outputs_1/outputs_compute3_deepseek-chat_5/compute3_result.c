@@ -38,7 +38,7 @@ int odd_sum(int n)
 int even_sum(int n)
 {
   int sum = 0;
-  #pragma hls_pipeline_init_interval 1
+  #pragma hls_unroll yes
   for (int i = 2; i < n; i += 2)
   {
     sum += i;
@@ -49,22 +49,22 @@ int even_sum(int n)
 
 int compute3(int n)
 {
-  int result0;
-  int result1;
-  int result2;
-  int result3;
+  int result0, result1, result2, result3;
 
-  // Unroll loops in child functions if possible
-  #pragma hls_unroll yes
+  // Inline fibonacci(n)
+  #pragma HLS INLINE
   result0 = fibonacci(n);
 
-  #pragma hls_unroll yes
+  // Inline odd_sum(result0)
+  #pragma HLS INLINE
   result1 = odd_sum(result0);
 
-  #pragma hls_unroll yes
+  // Inline even_sum(n)
+  #pragma HLS INLINE
   result2 = even_sum(n);
 
-  #pragma hls_unroll yes
+  // Inline fibonacci(result2)
+  #pragma HLS INLINE
   result3 = fibonacci(result2);
 
   return result3 - result1;

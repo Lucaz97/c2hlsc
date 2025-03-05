@@ -4,7 +4,7 @@ solution options set /OnTheFly/VthAttributeType cell_lib
 solution options set /Input/TargetPlatform x86_64
 solution options set /Output/OutputVHDL false
 solution options set /Output/GenerateCycleNetlist false
-solution file add tmp_compute3/compute3_deepseek-chat_agent_7.c -type C++
+solution file add tmp_compute6/compute6_llm.c -type C++
 directive set -DESIGN_GOAL area
 directive set -SPECULATE true
 directive set -MERGEABLE true
@@ -51,7 +51,7 @@ directive set -PROTOTYPING_ENGINE oasys
 directive set -PIPELINE_RAMP_UP true
 go new
 go analyze
-solution design set compute3 -top
+solution design set compute6 -top
 go compile
 solution library add nangate-45nm_beh -- -rtlsyntool DesignCompiler -vendor Nangate -technology 045nm
 solution library add ram_nangate-45nm_pipe_beh
