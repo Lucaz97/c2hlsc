@@ -6,6 +6,9 @@ class Benchmark:
     def __init__(self, name):
 
         self.name = name
+        self.deepseek_chat_logs = []
+        self.deepseek_reasoner_logs = []    
+        self.o3_mini_logs = []
 
         ###############################
         ### STATS FOR DEEPSEEK CHAT ###
@@ -48,6 +51,9 @@ class Benchmark:
         self.deepseek_chat_agent_time = 0
         self.min_deepseek_chat_agent_time = 999999
         self.max_deepseek_chat_agent_time = 0
+
+        # AGENT SEQUENCE
+        self.deepseek_chat_sequence = []
 
         # AGENT SYNTHESIS CALLS
         self.deepseek_chat_synthesis_calls = 0
@@ -134,6 +140,9 @@ class Benchmark:
         self.min_deepseek_reasoner_agent_time = 999999
         self.max_deepseek_reasoner_agent_time = 0
 
+        # AGENT SEQUENCE
+        self.deepseek_reasoner_sequence = []
+
         # AGENT SYNTHESIS CALLS
         self.deepseek_reasoner_synthesis_calls = 0
         self.min_deepseek_reasoner_synthesis_calls = 999999
@@ -219,6 +228,9 @@ class Benchmark:
         self.min_o3_mini_agent_time = 999999
         self.max_o3_mini_agent_time = 0
 
+        # AGENT SEQUENCE
+        self.o3_mini_sequence = []
+
         # AGENT SYNTHESIS CALLS
         self.o3_mini_synthesis_calls = 0
         self.min_o3_mini_synthesis_calls = 999999
@@ -282,6 +294,9 @@ for folder in folders:
 
             if os.path.exists(log_name):
                 with open(log_name, "r") as log_file:
+                    
+                    
+
                     for line in log_file:
 
                         if "deepseek-chat runs:" in line:
@@ -438,6 +453,21 @@ for folder in folders:
                                 benchmark_dict[benchmark].max_o3_mini_agent_time = max(benchmark_dict[benchmark].max_o3_mini_agent_time, time)
                                 # print(f"{folder}: {time}, {benchmark_dict[benchmark].o3_mini_agent_time}, {benchmark_dict[benchmark].min_o3_mini_agent_time}, {benchmark_dict[benchmark].max_o3_mini_agent_time}")
 
+                        if "Agent sequence:" in line:
+                            sequence = eval(" ".join(line.split(" ")[2:]))
+                            # print(sequence)
+
+                            if "deepseek-chat" in folder:
+                                benchmark_dict[benchmark].deepseek_chat_sequence.append(sequence)
+                                benchmark_dict[benchmark].deepseek_chat_logs.append(log_name)
+
+                            if "hyperbolic-reasoner" in folder or "deepseek-reasoner" in folder:
+                                benchmark_dict[benchmark].deepseek_reasoner_sequence.append(sequence)
+                                benchmark_dict[benchmark].deepseek_reasoner_logs.append(log_name)
+
+                            if "o3-mini" in folder:
+                                benchmark_dict[benchmark].o3_mini_sequence.append(sequence)
+                                benchmark_dict[benchmark].o3_mini_logs.append(log_name)
 
                         if "Agent synthesis calls:" in line:
                             calls = int(line.split(":")[1].strip())
@@ -712,760 +742,870 @@ for benchmark in benchmarks:
         benchmark_dict[benchmark].min_o3_mini_cost = (benchmark_dict[benchmark].min_o3_mini_input_tokens * o3_mini_cost_per_million_input_tokens + benchmark_dict[benchmark].min_o3_mini_output_tokens * o3_mini_cost_per_million_output_tokens) / 1000000
         benchmark_dict[benchmark].max_o3_mini_cost = (benchmark_dict[benchmark].max_o3_mini_input_tokens * o3_mini_cost_per_million_input_tokens + benchmark_dict[benchmark].max_o3_mini_output_tokens * o3_mini_cost_per_million_output_tokens) / 1000000
 
+v3_starts_syn = 0
+v3_not_starts = 0
 
-# # dump in a csv file
-# import csv
-# with open("parsed.csv", "w") as f:
-#     # header
-#     writer = csv.DictWriter(f, fieldnames=b_dict["Cipher"].__dict__.keys())
-#     writer.writeheader()
-#     for b in benchmarks:
-#         writer.writerow(b_dict[b].__dict__)
+r1_starts_syn = 0
+r1_not_starts = 0
+
+o3_starts_syn = 0
+o3_not_starts = 0
+
+v3_inspect_top = 0
+r1_inspect_top = 0
+o3_inspect_top = 0
+
+v3_inspect_to_python = 0
+r1_inspect_to_python = 0
+o3_inspect_to_python = 0
+
+for b in benchmarks:
+
+    for i, sequence in enumerate(benchmark_dict[b].deepseek_chat_sequence):
+        inspected = 0
+        counted = 0
+
+        for action in sequence:
+            if action.startswith("inspect:") and (f"{benchmark_dict[b].name} " in action or f"{benchmark_dict[b].name}_hls " in action):
+                # print(benchmark_dict[b].deepseek_chat_logs[i], action)
+                v3_inspect_top += 1
+                inspected = 1
+
+            if inspected and not counted and action.startswith("python:"):
+                print(benchmark_dict[b].deepseek_chat_logs[i], action)
+                v3_inspect_to_python += 1
+                counted = 1
 
 
-# PLOTS
-import matplotlib.pyplot as plt
-import numpy as np
+    for i, sequence in enumerate(benchmark_dict[b].deepseek_reasoner_sequence):
+        inspected = 0
+        counted = 0
 
-# colors for each model
-colors = ["#fdb462", "#8dd3c7", "#fb8072", "#80b1d3"]
-hatches = ["//", "\\\\", "XX"]
+        for action in sequence:
+            if action.startswith("inspect:") and (f"{benchmark_dict[b].name} " in action or f"{benchmark_dict[b].name}_hls " in action):
+                # print(benchmark_dict[b].deepseek_reasoner_logs[i], action)
+                r1_inspect_top += 1
+                inspected = 1
 
-# define number of benchmarks and width of bars
-x = np.arange(len(benchmarks))
-x = x*0.34
-# print(x)
-width = 0.10
-
-# benchmarks = ["compute1", "compute2", "compute3", "compute4", "compute5", "compute6", "Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
-pretty_names = ["SYN 1", "SYN 2", "SYN 3", "SYN 4", "SYN 5", "SYN 6", "AES", "SHA", "PRESENT", "KMP", "FIR+IIR", "NW"]
+            if inspected and not counted and action.startswith("python:"):
+                print(benchmark_dict[b].deepseek_reasoner_logs[i], action)
+                r1_inspect_to_python += 1
+                counted = 1
 
 
-##########################
-### PLOT SUCCESS RATES ###
-##########################
+    for i, sequence in enumerate(benchmark_dict[b].o3_mini_sequence):
+        inspected = 0
+        counted = 0
 
-# calculate success rates
-success_rates = []
-for benchmark in benchmarks:
-    deepseek_chat_success_rate = (benchmark_dict[benchmark].deepseek_chat_success / 10) * 100
-    deepseek_reasoner_success_rate = (benchmark_dict[benchmark].deepseek_reasoner_success / 10) * 100
-    o3_mini_success_rate = (benchmark_dict[benchmark].o3_mini_success / 10) * 100
-    success_rates.append((deepseek_chat_success_rate, deepseek_reasoner_success_rate, o3_mini_success_rate))
+        for action in sequence:
+            if action.startswith("inspect:") and (f"{benchmark_dict[b].name} " in action or f"{benchmark_dict[b].name}_hls " in action):
+                # print(benchmark_dict[b].o3_mini_logs[i], action)
+                o3_inspect_top += 1
+                inspected = 1
 
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
-# set style
-plt.style.use("seaborn-v0_8-talk")
+            if inspected and not counted and action.startswith("python:"):
+                print(benchmark_dict[b].o3_mini_logs[i], action)
+                o3_inspect_to_python += 1
+                counted = 1
 
-# plot bars side by side
-rects1 = ax.bar(x - width, [rate[0] for rate in success_rates], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
-rects2 = ax.bar(x, [rate[1] for rate in success_rates], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
-rects3 = ax.bar(x + width, [rate[2] for rate in success_rates], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
+        
+        # if not sequence[0].startswith("synthesis:"):
+        #     print(benchmark_dict[b].deepseek_chat_logs[i], sequence[0])
+        #     v3_not_starts += 1
+        # else:
+        #     v3_starts_syn += 1
+
+    # for i, sequence in enumerate(benchmark_dict[b].deepseek_reasoner_sequence):
+
+    #     if not sequence[0].startswith("synthesis:"):
+    #         print(benchmark_dict[b].deepseek_reasoner_logs[i], sequence[0])
+    #         r1_not_starts += 1
+    #     else:
+    #         r1_starts_syn += 1
+
+    # for i, sequence in enumerate(benchmark_dict[b].o3_mini_sequence): 
+
+    #     if not sequence[0].startswith("synthesis:"):
+    #         print(benchmark_dict[b].o3_mini_logs[i], sequence[0])
+    #         o3_not_starts += 1
+    #     else:
+    #         o3_starts_syn += 1
+
+    # break
+
+# print(v3_starts_syn, v3_not_starts)
+# print(r1_starts_syn, r1_not_starts)
+# print(o3_starts_syn, o3_not_starts)
+
+print(v3_inspect_top, r1_inspect_top, o3_inspect_top)
+print(v3_inspect_to_python, r1_inspect_to_python, o3_inspect_to_python)
+
+        # print(action)
+
+    # break
+
+
+
+
+
+# # # dump in a csv file
+# # import csv
+# # with open("parsed.csv", "w") as f:
+# #     # header
+# #     writer = csv.DictWriter(f, fieldnames=b_dict["Cipher"].__dict__.keys())
+# #     writer.writeheader()
+# #     for b in benchmarks:
+# #         writer.writerow(b_dict[b].__dict__)
+
+
+# # PLOTS
+# import matplotlib.pyplot as plt
+# import numpy as np
+
+# # colors for each model
+# colors = ["#fdb462", "#8dd3c7", "#fb8072", "#80b1d3"]
+# hatches = ["//", "\\\\", "XX"]
+
+# # define number of benchmarks and width of bars
+# x = np.arange(len(benchmarks))
+# x = x*0.34
+# # print(x)
+# width = 0.10
+
+# # benchmarks = ["compute1", "compute2", "compute3", "compute4", "compute5", "compute6", "Cipher", "sha256_update", "present80_encryptBlock", "kmp", "filter", "needwun"]
+# pretty_names = ["SYN 1", "SYN 2", "SYN 3", "SYN 4", "SYN 5", "SYN 6", "AES", "SHA", "PRESENT", "KMP", "FIR+IIR", "NW"]
+
+
+# ##########################
+# ### PLOT SUCCESS RATES ###
+# ##########################
+
+# # calculate success rates
+# success_rates = []
+# for benchmark in benchmarks:
+#     deepseek_chat_success_rate = (benchmark_dict[benchmark].deepseek_chat_success / 10) * 100
+#     deepseek_reasoner_success_rate = (benchmark_dict[benchmark].deepseek_reasoner_success / 10) * 100
+#     o3_mini_success_rate = (benchmark_dict[benchmark].o3_mini_success / 10) * 100
+#     success_rates.append((deepseek_chat_success_rate, deepseek_reasoner_success_rate, o3_mini_success_rate))
+
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
+# # set style
+# plt.style.use("seaborn-v0_8-talk")
+
+# # plot bars side by side
+# rects1 = ax.bar(x - width, [rate[0] for rate in success_rates], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+# rects2 = ax.bar(x, [rate[1] for rate in success_rates], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+# rects3 = ax.bar(x + width, [rate[2] for rate in success_rates], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
+# # ax.set_yscale("log")
+
+# # add labels, title, and legend
+# ax.set_ylabel("Success Rate (%)", fontsize=30)
+# ax.set_xlabel("Benchmarks", fontsize=30)
+# ax.set_xticks(x)
+# plt.yticks(fontsize=30)
+# ax.set_xlim([-0.18, 3.92])
+# ax.set_xticklabels(pretty_names, fontsize=25)
+# ax.legend(fontsize=30, ncol=3, loc="lower center")
+# plt.tight_layout()
+
+# # save the plot as pdf
+# plt.savefig("success_rate_comparison.pdf")
+
+
+# ##############################
+# ### PLOT AVERAGE LATENCIES ###
+# ##############################
+
+# average_latencies = []
+# latency_errors = []
+
+# for benchmark in benchmarks:
+    
+#     deepseek_chat_avg_latency = benchmark_dict[benchmark].deepseek_chat_latency if benchmark_dict[benchmark].deepseek_chat_latency != 999999 else 0
+#     deepseek_chat_min_latency = benchmark_dict[benchmark].min_deepseek_chat_latency if benchmark_dict[benchmark].min_deepseek_chat_latency != 999999 else 0
+#     deepseek_chat_max_latency = benchmark_dict[benchmark].max_deepseek_chat_latency if benchmark_dict[benchmark].max_deepseek_chat_latency != 999999 else 0
+
+#     deepseek_reasoner_avg_latency = benchmark_dict[benchmark].deepseek_reasoner_latency if benchmark_dict[benchmark].deepseek_reasoner_latency != 999999 else 0
+#     deepseek_reasoner_min_latency = benchmark_dict[benchmark].min_deepseek_reasoner_latency if benchmark_dict[benchmark].min_deepseek_reasoner_latency != 999999 else 0
+#     deepseek_reasoner_max_latency = benchmark_dict[benchmark].max_deepseek_reasoner_latency if benchmark_dict[benchmark].max_deepseek_reasoner_latency != 999999 else 0
+
+#     o3_mini_avg_latency = benchmark_dict[benchmark].o3_mini_latency if benchmark_dict[benchmark].o3_mini_latency != 999999 else 0
+#     o3_mini_min_latency = benchmark_dict[benchmark].min_o3_mini_latency if benchmark_dict[benchmark].min_o3_mini_latency != 999999 else 0
+#     o3_mini_max_latency = benchmark_dict[benchmark].max_o3_mini_latency if benchmark_dict[benchmark].max_o3_mini_latency != 999999 else 0
+
+#     # append average latencies
+#     average_latencies.append((deepseek_chat_avg_latency, deepseek_reasoner_avg_latency, o3_mini_avg_latency))
+
+#     # calculate the errors (difference between min/max and the average)
+#     deepseek_chat_error = [deepseek_chat_avg_latency - deepseek_chat_min_latency, deepseek_chat_max_latency - deepseek_chat_avg_latency]
+#     deepseek_reasoner_error = [deepseek_reasoner_avg_latency - deepseek_reasoner_min_latency, deepseek_reasoner_max_latency - deepseek_reasoner_avg_latency]
+#     o3_mini_error = [o3_mini_avg_latency - o3_mini_min_latency, o3_mini_max_latency - o3_mini_avg_latency]
+
+#     # append errors
+#     latency_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
+    
+# average_latencies = np.array(average_latencies)
+# latency_errors = np.array(latency_errors)
+
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
+
+# # plot bars side by side
+# rects4 = ax.bar(x - width, average_latencies[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+# rects5 = ax.bar(x, average_latencies[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+# rects6 = ax.bar(x + width, average_latencies[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
 # ax.set_yscale("log")
 
-# add labels, title, and legend
-ax.set_ylabel("Success Rate (%)", fontsize=30)
-ax.set_xlabel("Benchmarks", fontsize=30)
-ax.set_xticks(x)
-plt.yticks(fontsize=30)
-ax.set_xlim([-0.18, 3.92])
-ax.set_xticklabels(pretty_names, fontsize=25)
-ax.legend(fontsize=30, ncol=3, loc="lower center")
-plt.tight_layout()
+# # # add error bars for latency range (min-max)
+# for i in range(len(x)):
 
-# save the plot as pdf
-plt.savefig("success_rate_comparison.pdf")
-
-
-##############################
-### PLOT AVERAGE LATENCIES ###
-##############################
-
-average_latencies = []
-latency_errors = []
-
-for benchmark in benchmarks:
+#     # deepseek-chat
+#     ax.errorbar(x[i] - width, average_latencies[i, 0], 
+#                 yerr=[[latency_errors[i, 0][0]], [latency_errors[i, 0][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-    deepseek_chat_avg_latency = benchmark_dict[benchmark].deepseek_chat_latency if benchmark_dict[benchmark].deepseek_chat_latency != 999999 else 0
-    deepseek_chat_min_latency = benchmark_dict[benchmark].min_deepseek_chat_latency if benchmark_dict[benchmark].min_deepseek_chat_latency != 999999 else 0
-    deepseek_chat_max_latency = benchmark_dict[benchmark].max_deepseek_chat_latency if benchmark_dict[benchmark].max_deepseek_chat_latency != 999999 else 0
+#     # deepseek-reasoner
+#     ax.errorbar(x[i], average_latencies[i, 1], 
+#                 yerr=[[latency_errors[i, 1][0]], [latency_errors[i, 1][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-    deepseek_reasoner_avg_latency = benchmark_dict[benchmark].deepseek_reasoner_latency if benchmark_dict[benchmark].deepseek_reasoner_latency != 999999 else 0
-    deepseek_reasoner_min_latency = benchmark_dict[benchmark].min_deepseek_reasoner_latency if benchmark_dict[benchmark].min_deepseek_reasoner_latency != 999999 else 0
-    deepseek_reasoner_max_latency = benchmark_dict[benchmark].max_deepseek_reasoner_latency if benchmark_dict[benchmark].max_deepseek_reasoner_latency != 999999 else 0
+#     # o3-mini
+#     ax.errorbar(x[i] + width, average_latencies[i, 2], 
+#                 yerr=[[latency_errors[i, 2][0]], [latency_errors[i, 2][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-    o3_mini_avg_latency = benchmark_dict[benchmark].o3_mini_latency if benchmark_dict[benchmark].o3_mini_latency != 999999 else 0
-    o3_mini_min_latency = benchmark_dict[benchmark].min_o3_mini_latency if benchmark_dict[benchmark].min_o3_mini_latency != 999999 else 0
-    o3_mini_max_latency = benchmark_dict[benchmark].max_o3_mini_latency if benchmark_dict[benchmark].max_o3_mini_latency != 999999 else 0
+# # add labels, title, and legend
+# ax.set_ylabel("Latency [cycles]", fontsize=30)
+# ax.set_xlabel("Benchmarks", fontsize=30)
+# ax.set_xticks(x)
+# plt.yticks(fontsize=30)
+# ax.set_xlim([-0.18, 3.92])
+# ax.set_xticklabels(pretty_names, fontsize=25)
+# ax.legend(fontsize=30)
+# plt.tight_layout()
 
-    # append average latencies
-    average_latencies.append((deepseek_chat_avg_latency, deepseek_reasoner_avg_latency, o3_mini_avg_latency))
-
-    # calculate the errors (difference between min/max and the average)
-    deepseek_chat_error = [deepseek_chat_avg_latency - deepseek_chat_min_latency, deepseek_chat_max_latency - deepseek_chat_avg_latency]
-    deepseek_reasoner_error = [deepseek_reasoner_avg_latency - deepseek_reasoner_min_latency, deepseek_reasoner_max_latency - deepseek_reasoner_avg_latency]
-    o3_mini_error = [o3_mini_avg_latency - o3_mini_min_latency, o3_mini_max_latency - o3_mini_avg_latency]
-
-    # append errors
-    latency_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
-    
-average_latencies = np.array(average_latencies)
-latency_errors = np.array(latency_errors)
-
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
-
-# plot bars side by side
-rects4 = ax.bar(x - width, average_latencies[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
-rects5 = ax.bar(x, average_latencies[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
-rects6 = ax.bar(x + width, average_latencies[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
-ax.set_yscale("log")
-
-# # add error bars for latency range (min-max)
-for i in range(len(x)):
-
-    # deepseek-chat
-    ax.errorbar(x[i] - width, average_latencies[i, 0], 
-                yerr=[[latency_errors[i, 0][0]], [latency_errors[i, 0][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-    
-    # deepseek-reasoner
-    ax.errorbar(x[i], average_latencies[i, 1], 
-                yerr=[[latency_errors[i, 1][0]], [latency_errors[i, 1][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-    # o3-mini
-    ax.errorbar(x[i] + width, average_latencies[i, 2], 
-                yerr=[[latency_errors[i, 2][0]], [latency_errors[i, 2][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-# add labels, title, and legend
-ax.set_ylabel("Latency [cycles]", fontsize=30)
-ax.set_xlabel("Benchmarks", fontsize=30)
-ax.set_xticks(x)
-plt.yticks(fontsize=30)
-ax.set_ylim([1, 10000])
-ax.set_xlim([-0.18, 3.92])
-ax.set_xticklabels(pretty_names, fontsize=25)
-ax.legend(fontsize=30)
-plt.tight_layout()
-
-# save the plot as pdf
-plt.savefig("average_latency_comparison.pdf")
+# # save the plot as pdf
+# plt.savefig("average_latency_comparison.pdf")
 
 
-##########################
-### PLOT AVERAGE AREAS ###
-##########################
+# ##########################
+# ### PLOT AVERAGE AREAS ###
+# ##########################
 
-average_areas = []
-area_errors = []
+# average_areas = []
+# area_errors = []
 
-for benchmark in benchmarks:
-    deepseek_chat_avg_area = benchmark_dict[benchmark].deepseek_chat_area if benchmark_dict[benchmark].deepseek_chat_area != 999999 else 0
-    deepseek_chat_min_area = benchmark_dict[benchmark].min_deepseek_chat_area if benchmark_dict[benchmark].min_deepseek_chat_area != 999999 else 0
-    deepseek_chat_max_area = benchmark_dict[benchmark].max_deepseek_chat_area if benchmark_dict[benchmark].max_deepseek_chat_area != 999999 else 0
+# for benchmark in benchmarks:
+#     deepseek_chat_avg_area = benchmark_dict[benchmark].deepseek_chat_area if benchmark_dict[benchmark].deepseek_chat_area != 999999 else 0
+#     deepseek_chat_min_area = benchmark_dict[benchmark].min_deepseek_chat_area if benchmark_dict[benchmark].min_deepseek_chat_area != 999999 else 0
+#     deepseek_chat_max_area = benchmark_dict[benchmark].max_deepseek_chat_area if benchmark_dict[benchmark].max_deepseek_chat_area != 999999 else 0
 
-    deepseek_reasoner_avg_area = benchmark_dict[benchmark].deepseek_reasoner_area if benchmark_dict[benchmark].deepseek_reasoner_area != 999999 else 0
-    deepseek_reasoner_min_area = benchmark_dict[benchmark].min_deepseek_reasoner_area if benchmark_dict[benchmark].min_deepseek_reasoner_area != 999999 else 0
-    deepseek_reasoner_max_area = benchmark_dict[benchmark].max_deepseek_reasoner_area if benchmark_dict[benchmark].max_deepseek_reasoner_area != 999999 else 0
+#     deepseek_reasoner_avg_area = benchmark_dict[benchmark].deepseek_reasoner_area if benchmark_dict[benchmark].deepseek_reasoner_area != 999999 else 0
+#     deepseek_reasoner_min_area = benchmark_dict[benchmark].min_deepseek_reasoner_area if benchmark_dict[benchmark].min_deepseek_reasoner_area != 999999 else 0
+#     deepseek_reasoner_max_area = benchmark_dict[benchmark].max_deepseek_reasoner_area if benchmark_dict[benchmark].max_deepseek_reasoner_area != 999999 else 0
 
-    o3_mini_avg_area = benchmark_dict[benchmark].o3_mini_area if benchmark_dict[benchmark].o3_mini_area != 999999 else 0
-    o3_mini_min_area = benchmark_dict[benchmark].min_o3_mini_area if benchmark_dict[benchmark].min_o3_mini_area != 999999 else 0
-    o3_mini_max_area = benchmark_dict[benchmark].max_o3_mini_area if benchmark_dict[benchmark].max_o3_mini_area != 999999 else 0
+#     o3_mini_avg_area = benchmark_dict[benchmark].o3_mini_area if benchmark_dict[benchmark].o3_mini_area != 999999 else 0
+#     o3_mini_min_area = benchmark_dict[benchmark].min_o3_mini_area if benchmark_dict[benchmark].min_o3_mini_area != 999999 else 0
+#     o3_mini_max_area = benchmark_dict[benchmark].max_o3_mini_area if benchmark_dict[benchmark].max_o3_mini_area != 999999 else 0
 
-    # append average areas
-    average_areas.append((deepseek_chat_avg_area, deepseek_reasoner_avg_area, o3_mini_avg_area))
+#     # append average areas
+#     average_areas.append((deepseek_chat_avg_area, deepseek_reasoner_avg_area, o3_mini_avg_area))
 
-    # calculate the errors (difference between min/max and the average)
-    deepseek_chat_error = [deepseek_chat_avg_area - deepseek_chat_min_area, deepseek_chat_max_area - deepseek_chat_avg_area]
-    if abs(deepseek_chat_error[0]) < 0.0000001:
-        deepseek_chat_error[0] = 0
-    if abs(deepseek_chat_error[1]) < 0.0000001:
-        deepseek_chat_error[1] = 0
+#     # calculate the errors (difference between min/max and the average)
+#     deepseek_chat_error = [deepseek_chat_avg_area - deepseek_chat_min_area, deepseek_chat_max_area - deepseek_chat_avg_area]
+#     if abs(deepseek_chat_error[0]) < 0.0000001:
+#         deepseek_chat_error[0] = 0
+#     if abs(deepseek_chat_error[1]) < 0.0000001:
+#         deepseek_chat_error[1] = 0
 
-    deepseek_reasoner_error = [deepseek_reasoner_avg_area - deepseek_reasoner_min_area, deepseek_reasoner_max_area - deepseek_reasoner_avg_area]
-    if abs(deepseek_reasoner_error[0]) < 0.0000001:
-        deepseek_reasoner_error[0] = 0
-    if abs(deepseek_reasoner_error[1]) < 0.0000001:
-        deepseek_reasoner_error[1] = 0
+#     deepseek_reasoner_error = [deepseek_reasoner_avg_area - deepseek_reasoner_min_area, deepseek_reasoner_max_area - deepseek_reasoner_avg_area]
+#     if abs(deepseek_reasoner_error[0]) < 0.0000001:
+#         deepseek_reasoner_error[0] = 0
+#     if abs(deepseek_reasoner_error[1]) < 0.0000001:
+#         deepseek_reasoner_error[1] = 0
 
-    o3_mini_error = [o3_mini_avg_area - o3_mini_min_area, o3_mini_max_area - o3_mini_avg_area]
-    if abs(o3_mini_error[0]) < 0.0000001:
-        o3_mini_error[0] = 0
-    if abs(o3_mini_error[1]) < 0.0000001:
-        o3_mini_error[1] = 0
+#     o3_mini_error = [o3_mini_avg_area - o3_mini_min_area, o3_mini_max_area - o3_mini_avg_area]
+#     if abs(o3_mini_error[0]) < 0.0000001:
+#         o3_mini_error[0] = 0
+#     if abs(o3_mini_error[1]) < 0.0000001:
+#         o3_mini_error[1] = 0
         
-    # append errors
-    area_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
+#     # append errors
+#     area_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
 
-average_areas = np.array(average_areas)
-area_errors = np.array(area_errors)
+# average_areas = np.array(average_areas)
+# area_errors = np.array(area_errors)
 
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
 
-# plot bars side by side
-rects7 = ax.bar(x - width, average_areas[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
-rects8 = ax.bar(x, average_areas[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
-rects9 = ax.bar(x + width, average_areas[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
-ax.set_yscale("log")
+# # plot bars side by side
+# rects7 = ax.bar(x - width, average_areas[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+# rects8 = ax.bar(x, average_areas[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+# rects9 = ax.bar(x + width, average_areas[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
+# ax.set_yscale("log")
+
+# # # add error bars for area range (min-max)
+# for i in range(len(x)):
+#     # print([area_errors[i, 0][1]])
+#     # print([area_errors[i, 0][0]])
+#     # deepseek-chat
+#     ax.errorbar(x[i] - width, average_areas[i, 0], 
+#                 yerr=[[area_errors[i, 0][0]], [area_errors[i, 0][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    
+#     # deepseek-reasoner
+#     ax.errorbar(x[i], average_areas[i, 1], 
+#                 yerr=[[area_errors[i, 1][0]], [area_errors[i, 1][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+#     # o3-mini
+#     ax.errorbar(x[i] + width, average_areas[i, 2], 
+#                 yerr=[[area_errors[i, 2][0]], [area_errors[i, 2][1]]], 
+#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+# # add labels, title, and legend
+# ax.set_ylabel("Area [um2]", fontsize=30)
+# ax.set_xlabel("Benchmarks", fontsize=30)
+# ax.set_xticks(x)
+# plt.yticks(fontsize=30)
+# ax.set_xlim([-0.18, 3.92])
+# ax.set_xticklabels(pretty_names, fontsize=25)
+# #ax.legend(fontsize=30)
+# plt.tight_layout()
+
+# # save the plot as pdf
+# plt.savefig("average_area_comparison.pdf")
+
+
+# ##########################
+# ### PLOT AVERAGE COSTS ###
+# ##########################
+
+# # calculate average cost
+# average_costs = []
+# cost_errors = []
+
+# for benchmark in benchmarks:
+
+#     deepseek_chat_avg_cost = benchmark_dict[benchmark].deepseek_chat_cost if benchmark_dict[benchmark].deepseek_chat_cost != 999999 else 0
+#     deepseek_chat_min_cost = benchmark_dict[benchmark].min_deepseek_chat_cost if benchmark_dict[benchmark].min_deepseek_chat_cost != 999999 else 0
+#     deepseek_chat_max_cost = benchmark_dict[benchmark].max_deepseek_chat_cost if benchmark_dict[benchmark].max_deepseek_chat_cost != 999999 else 0
+    
+#     deepseek_reasoner_avg_cost = benchmark_dict[benchmark].deepseek_reasoner_cost if benchmark_dict[benchmark].deepseek_reasoner_cost != 999999 else 0
+#     deepseek_reasoner_min_cost = benchmark_dict[benchmark].min_deepseek_reasoner_cost if benchmark_dict[benchmark].min_deepseek_reasoner_cost != 999999 else 0
+#     deepseek_reasoner_max_cost = benchmark_dict[benchmark].max_deepseek_reasoner_cost if benchmark_dict[benchmark].max_deepseek_reasoner_cost != 999999 else 0
+    
+#     o3_mini_avg_cost = benchmark_dict[benchmark].o3_mini_cost if benchmark_dict[benchmark].o3_mini_cost != 999999 else 0
+#     o3_mini_min_cost = benchmark_dict[benchmark].min_o3_mini_cost if benchmark_dict[benchmark].min_o3_mini_cost != 999999 else 0
+#     o3_mini_max_cost = benchmark_dict[benchmark].max_o3_mini_cost if benchmark_dict[benchmark].max_o3_mini_cost != 999999 else 0
+    
+#     # append average costs
+#     average_costs.append((deepseek_chat_avg_cost, deepseek_reasoner_avg_cost, o3_mini_avg_cost))
+    
+#     # calculate the errors (difference between min/max and the average)
+#     deepseek_chat_error = [deepseek_chat_avg_cost - deepseek_chat_min_cost if abs(deepseek_chat_avg_cost - deepseek_chat_min_cost) > 0.0000001 else 0, deepseek_chat_max_cost - deepseek_chat_avg_cost if abs(deepseek_chat_max_cost - deepseek_chat_avg_cost) > 0.0000001 else 0]
+#     deepseek_reasoner_error = [deepseek_reasoner_avg_cost - deepseek_reasoner_min_cost if abs(deepseek_reasoner_avg_cost - deepseek_reasoner_min_cost) > 0.0000001 else 0, deepseek_reasoner_max_cost - deepseek_reasoner_avg_cost if abs(deepseek_reasoner_max_cost - deepseek_reasoner_avg_cost) > 0.0000001 else 0]
+#     o3_mini_error = [o3_mini_avg_cost - o3_mini_min_cost if abs(o3_mini_avg_cost - o3_mini_min_cost) > 0.0000001 else 0, o3_mini_max_cost - o3_mini_avg_cost if abs(o3_mini_max_cost - o3_mini_avg_cost) > 0.0000001 else 0]
+
+#     # append error values
+#     cost_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
+
+# average_costs = np.array(average_costs)
+# cost_errors = np.array(cost_errors)
+
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
+
+# # plot bars side by side
+# rects10 = ax.bar(x - width, average_costs[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+# rects11 = ax.bar(x, average_costs[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+# rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
+# # #ax.set_yscale("log")
+
+# # # add error bars for area range (min-max)
+# # for i in range(len(x)):
+
+# #     # deepseek-chat
+# #     ax.errorbar(x[i] - width, average_costs[i, 0], 
+# #                 yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+    
+# #     # deepseek-reasoner
+# #     ax.errorbar(x[i], average_costs[i, 1], 
+# #                 yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+# #     # o3-mini
+# #     ax.errorbar(x[i] + width, average_costs[i, 2], 
+# #                 yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+# # add labels, title, and legend
+# ax.set_ylabel("Cost [$]", fontsize=30)
+# ax.set_xlabel("Benchmarks", fontsize=30)
+# ax.set_xticks(x)
+# ax.set_xlim([-0.18, 3.92])
+# plt.yticks(fontsize=30)
+# ax.set_xticklabels(pretty_names, fontsize=25)
+# #ax.legend(fontsize=30)
+# plt.tight_layout()
+
+# # save the plot as pdf
+# plt.savefig("average_cost_comparison.pdf")
+
+
+# ##########################
+# ### PLOT AVERAGE TIMES ###
+# ##########################
+
+# # calculate average time
+# average_times = []
+# time_errors = []
+
+# for benchmark in benchmarks:
+
+#     # average times
+#     deepseek_chat_avg_c2hlsc_time = benchmark_dict[benchmark].deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].deepseek_chat_c2hlsc_time != 999999 else 0
+#     deepseek_chat_avg_agent_time = benchmark_dict[benchmark].deepseek_chat_agent_time if benchmark_dict[benchmark].deepseek_chat_agent_time != 999999 else 0
+#     deepseek_chat_avg_api_downtime = benchmark_dict[benchmark].deepseek_chat_api_downtime if benchmark_dict[benchmark].deepseek_chat_api_downtime != 999999 else 0
+
+#     deepseek_reasoner_avg_c2hlsc_time = benchmark_dict[benchmark].deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].deepseek_reasoner_c2hlsc_time != 999999 else 0
+#     deepseek_reasoner_avg_agent_time = benchmark_dict[benchmark].deepseek_reasoner_agent_time if benchmark_dict[benchmark].deepseek_reasoner_agent_time != 999999 else 0
+#     deepseek_reasoner_avg_api_downtime = benchmark_dict[benchmark].deepseek_reasoner_api_downtime if benchmark_dict[benchmark].deepseek_reasoner_api_downtime != 999999 else 0
+
+#     o3_mini_avg_c2hlsc_time = benchmark_dict[benchmark].o3_mini_c2hlsc_time if benchmark_dict[benchmark].o3_mini_c2hlsc_time != 999999 else 0
+#     o3_mini_avg_agent_time = benchmark_dict[benchmark].o3_mini_agent_time if benchmark_dict[benchmark].o3_mini_agent_time != 999999 else 0
+#     o3_mini_avg_api_downtime = benchmark_dict[benchmark].o3_mini_api_downtime if benchmark_dict[benchmark].o3_mini_api_downtime != 999999 else 0
+
+#     deepseek_chat_avg_time = (deepseek_chat_avg_c2hlsc_time + deepseek_chat_avg_agent_time - deepseek_chat_avg_api_downtime) / 60
+#     deepseek_reasoner_avg_time = (deepseek_reasoner_avg_c2hlsc_time + deepseek_reasoner_avg_agent_time - deepseek_reasoner_avg_api_downtime) / 60
+#     o3_mini_avg_time = (o3_mini_avg_c2hlsc_time + o3_mini_avg_agent_time - o3_mini_avg_api_downtime) / 60
+
+#     average_times.append((deepseek_chat_avg_time, deepseek_reasoner_avg_time, o3_mini_avg_time))
+
+#     # # min times
+#     # deepseek_chat_min_c2hlsc_time = benchmark_dict[benchmark].min_deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].min_deepseek_chat_c2hlsc_time != 999999 else 0
+#     # deepseek_chat_min_agent_time = benchmark_dict[benchmark].min_deepseek_chat_agent_time if benchmark_dict[benchmark].min_deepseek_chat_agent_time != 999999 else 0
+#     # deepseek_chat_min_api_downtime = benchmark_dict[benchmark].min_deepseek_chat_api_downtime if benchmark_dict[benchmark].min_deepseek_chat_api_downtime != 999999 else 0
+
+#     # deepseek_reasoner_min_c2hlsc_time = benchmark_dict[benchmark].min_deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].min_deepseek_reasoner_c2hlsc_time != 999999 else 0
+#     # deepseek_reasoner_min_agent_time = benchmark_dict[benchmark].min_deepseek_reasoner_agent_time if benchmark_dict[benchmark].min_deepseek_reasoner_agent_time != 999999 else 0
+#     # deepseek_reasoner_min_api_downtime = benchmark_dict[benchmark].min_deepseek_reasoner_api_downtime if benchmark_dict[benchmark].min_deepseek_reasoner_api_downtime != 999999 else 0
+
+#     # o3_mini_min_c2hlsc_time = benchmark_dict[benchmark].min_o3_mini_c2hlsc_time if benchmark_dict[benchmark].min_o3_mini_c2hlsc_time != 999999 else 0
+#     # o3_mini_min_agent_time = benchmark_dict[benchmark].min_o3_mini_agent_time if benchmark_dict[benchmark].min_o3_mini_agent_time != 999999 else 0
+#     # o3_mini_min_api_downtime = benchmark_dict[benchmark].min_o3_mini_api_downtime if benchmark_dict[benchmark].min_o3_mini_api_downtime != 999999 else 0
+
+#     # deepseek_chat_min_time = (deepseek_chat_min_c2hlsc_time + deepseek_chat_min_agent_time - deepseek_chat_min_api_downtime) / 60
+#     # deepseek_reasoner_min_time = (deepseek_reasoner_min_c2hlsc_time + deepseek_reasoner_min_agent_time - deepseek_reasoner_min_api_downtime) / 60
+#     # o3_mini_min_time = (o3_mini_min_c2hlsc_time + o3_mini_min_agent_time - o3_mini_min_api_downtime) / 60
+
+#     # # max times
+#     # deepseek_chat_max_c2hlsc_time = benchmark_dict[benchmark].max_deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].max_deepseek_chat_c2hlsc_time != 999999 else 0
+#     # deepseek_chat_max_agent_time = benchmark_dict[benchmark].max_deepseek_chat_agent_time if benchmark_dict[benchmark].max_deepseek_chat_agent_time != 999999 else 0
+#     # deepseek_chat_max_api_downtime = benchmark_dict[benchmark].max_deepseek_chat_api_downtime if benchmark_dict[benchmark].max_deepseek_chat_api_downtime != 999999 else 0
+
+#     # deepseek_reasoner_max_c2hlsc_time = benchmark_dict[benchmark].max_deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].max_deepseek_reasoner_c2hlsc_time != 999999 else 0
+#     # deepseek_reasoner_max_agent_time = benchmark_dict[benchmark].max_deepseek_reasoner_agent_time if benchmark_dict[benchmark].max_deepseek_reasoner_agent_time != 999999 else 0
+#     # deepseek_reasoner_max_api_downtime = benchmark_dict[benchmark].max_deepseek_reasoner_api_downtime if benchmark_dict[benchmark].max_deepseek_reasoner_api_downtime != 999999 else 0
+
+#     # o3_mini_max_c2hlsc_time = benchmark_dict[benchmark].max_o3_mini_c2hlsc_time if benchmark_dict[benchmark].max_o3_mini_c2hlsc_time != 999999 else 0
+#     # o3_mini_max_agent_time = benchmark_dict[benchmark].max_o3_mini_agent_time if benchmark_dict[benchmark].max_o3_mini_agent_time != 999999 else 0
+#     # o3_mini_max_api_downtime = benchmark_dict[benchmark].max_o3_mini_api_downtime if benchmark_dict[benchmark].max_o3_mini_api_downtime != 999999 else 0
+
+#     # deepseek_chat_max_time = (deepseek_chat_max_c2hlsc_time + deepseek_chat_max_agent_time - deepseek_chat_max_api_downtime) / 60
+#     # deepseek_reasoner_max_time = (deepseek_reasoner_max_c2hlsc_time + deepseek_reasoner_max_agent_time - deepseek_reasoner_max_api_downtime) / 60
+#     # o3_mini_max_time = (o3_mini_max_c2hlsc_time + o3_mini_max_agent_time - o3_mini_max_api_downtime) / 60
+    
+#     # # calculate the errors (difference between min/max and the average)
+#     # deepseek_chat_error = [deepseek_chat_avg_time - deepseek_chat_min_time, deepseek_chat_max_time - deepseek_chat_avg_time]
+#     # deepseek_reasoner_error = [deepseek_reasoner_avg_time - deepseek_reasoner_min_time, deepseek_reasoner_max_time - deepseek_reasoner_avg_time]
+#     # o3_mini_error = [o3_mini_avg_time - o3_mini_min_time, o3_mini_max_time - o3_mini_avg_time]
+
+#     # # append error values
+#     # time_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
+
+# average_times = np.array(average_times)
+# # time_errors = np.array(time_errors)
+
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
+
+# # plot bars side by side
+# rects13 = ax.bar(x - width, average_times[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
+# rects14 = ax.bar(x, average_times[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
+# rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
+# # #ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
-for i in range(len(x)):
-    # print([area_errors[i, 0][1]])
-    # print([area_errors[i, 0][0]])
-    # deepseek-chat
-    ax.errorbar(x[i] - width, average_areas[i, 0], 
-                yerr=[[area_errors[i, 0][0]], [area_errors[i, 0][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+# # for i in range(len(x)):
+
+# #     # deepseek-chat
+# #     ax.errorbar(x[i] - width, average_times[i, 0], 
+# #                 yerr=[[time_errors[i, 0][0]], [time_errors[i, 0][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-    # deepseek-reasoner
-    ax.errorbar(x[i], average_areas[i, 1], 
-                yerr=[[area_errors[i, 1][0]], [area_errors[i, 1][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+# #     # deepseek-reasoner
+# #     ax.errorbar(x[i], average_times[i, 1], 
+# #                 yerr=[[time_errors[i, 1][0]], [time_errors[i, 1][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-    # o3-mini
-    ax.errorbar(x[i] + width, average_areas[i, 2], 
-                yerr=[[area_errors[i, 2][0]], [area_errors[i, 2][1]]], 
-                fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+# #     # o3-mini
+# #     ax.errorbar(x[i] + width, average_times[i, 2], 
+# #                 yerr=[[time_errors[i, 2][0]], [time_errors[i, 2][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
 
-target_area = [
-    4000, 
-    4000,
-    2800,
-    4000,
-    8000,
-    7000,
-    3800,
-    40000,
-    10500,
-    10000,
-    4200,
-    10000
-]
+# target_area = [
+#     4000, 
+#     4000,
+#     2800,
+#     4000,
+#     8000,
+#     7000,
+#     3800,
+#     40000,
+#     10500,
+#     10000,
+#     4200,
+#     10000
+# ]
 
-# Add horizontal dashed lines for each group
-for i in range(len(x)):
-    # Calculate the start and end x-coordinates for the line
-    start_x = x[i] - 1.5 * width  # Left edge of the first bar
-    end_x = x[i] + 1.5 * width    # Right edge of the last bar
+# # Add horizontal dashed lines for each group
+# for i in range(len(x)):
+#     # Calculate the start and end x-coordinates for the line
+#     start_x = x[i] - 1.5 * width  # Left edge of the first bar
+#     end_x = x[i] + 1.5 * width    # Right edge of the last bar
     
-    # Add horizontal dashed line
-    ax.hlines(target_area[i], start_x, end_x, 
-              colors='blue', linestyles='--', linewidth=2, zorder=3)
+#     # Add horizontal dashed line
+#     ax.hlines(target_area[i], start_x, end_x, 
+#               colors='blue', linestyles='--', linewidth=2, zorder=3)
 
-# add labels, title, and legend
-ax.set_ylabel("Area [um2]", fontsize=30)
-ax.set_xlabel("Benchmarks", fontsize=30)
-ax.set_xticks(x)
-ax.set_ylim([1000, 100000])
-plt.yticks(fontsize=30)
-ax.set_xlim([-0.18, 3.92])
-ax.set_xticklabels(pretty_names, fontsize=25)
-#ax.legend(fontsize=30)
-plt.tight_layout()
+# # add labels, title, and legend
+# ax.set_ylabel("Area [um2]", fontsize=30)
+# ax.set_xlabel("Benchmarks", fontsize=30)
+# ax.set_xticks(x)
+# ax.set_ylim([1000, 100000])
+# plt.yticks(fontsize=30)
+# ax.set_xlim([-0.18, 3.92])
+# ax.set_xticklabels(pretty_names, fontsize=25)
+# #ax.legend(fontsize=30)
+# plt.tight_layout()
 
-# save the plot as pdf
-plt.savefig("average_area_comparison.pdf")
+# # save the plot as pdf
+# plt.savefig("average_time_comparison.pdf")
 
 
-##########################
-### PLOT AVERAGE COSTS ###
-##########################
+# ####################
+# ### PLOT ACTIONS ###
+# ####################
 
-# calculate average cost
-average_costs = []
-cost_errors = []
+# model_names = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
+# x = np.arange(len(model_names))
+# x = x*0.4
+# # print(x)
+# deepseek_chat_synthesis_calls = 0
+# deepseek_reasoner_synthesis_calls = 0
+# o3_mini_synthesis_calls = 0
 
-for benchmark in benchmarks:
+# deepseek_chat_python_calls = 0
+# deepseek_reasoner_python_calls = 0
+# o3_mini_python_calls = 0
 
-    deepseek_chat_avg_cost = benchmark_dict[benchmark].deepseek_chat_cost if benchmark_dict[benchmark].deepseek_chat_cost != 999999 else 0
-    deepseek_chat_min_cost = benchmark_dict[benchmark].min_deepseek_chat_cost if benchmark_dict[benchmark].min_deepseek_chat_cost != 999999 else 0
-    deepseek_chat_max_cost = benchmark_dict[benchmark].max_deepseek_chat_cost if benchmark_dict[benchmark].max_deepseek_chat_cost != 999999 else 0
+# deepseek_chat_profile_calls = 0
+# deepseek_reasoner_profile_calls = 0
+# o3_mini_profile_calls = 0
+
+# deepseek_chat_inspect_calls = 0
+# deepseek_reasoner_inspect_calls = 0
+# o3_mini_inspect_calls = 0
+
+# for benchmark in benchmarks:
     
-    deepseek_reasoner_avg_cost = benchmark_dict[benchmark].deepseek_reasoner_cost if benchmark_dict[benchmark].deepseek_reasoner_cost != 999999 else 0
-    deepseek_reasoner_min_cost = benchmark_dict[benchmark].min_deepseek_reasoner_cost if benchmark_dict[benchmark].min_deepseek_reasoner_cost != 999999 else 0
-    deepseek_reasoner_max_cost = benchmark_dict[benchmark].max_deepseek_reasoner_cost if benchmark_dict[benchmark].max_deepseek_reasoner_cost != 999999 else 0
-    
-    o3_mini_avg_cost = benchmark_dict[benchmark].o3_mini_cost if benchmark_dict[benchmark].o3_mini_cost != 999999 else 0
-    o3_mini_min_cost = benchmark_dict[benchmark].min_o3_mini_cost if benchmark_dict[benchmark].min_o3_mini_cost != 999999 else 0
-    o3_mini_max_cost = benchmark_dict[benchmark].max_o3_mini_cost if benchmark_dict[benchmark].max_o3_mini_cost != 999999 else 0
-    
-    # append average costs
-    average_costs.append((deepseek_chat_avg_cost, deepseek_reasoner_avg_cost, o3_mini_avg_cost))
-    
-    # calculate the errors (difference between min/max and the average)
-    deepseek_chat_error = [deepseek_chat_avg_cost - deepseek_chat_min_cost if abs(deepseek_chat_avg_cost - deepseek_chat_min_cost) > 0.0000001 else 0, deepseek_chat_max_cost - deepseek_chat_avg_cost if abs(deepseek_chat_max_cost - deepseek_chat_avg_cost) > 0.0000001 else 0]
-    deepseek_reasoner_error = [deepseek_reasoner_avg_cost - deepseek_reasoner_min_cost if abs(deepseek_reasoner_avg_cost - deepseek_reasoner_min_cost) > 0.0000001 else 0, deepseek_reasoner_max_cost - deepseek_reasoner_avg_cost if abs(deepseek_reasoner_max_cost - deepseek_reasoner_avg_cost) > 0.0000001 else 0]
-    o3_mini_error = [o3_mini_avg_cost - o3_mini_min_cost if abs(o3_mini_avg_cost - o3_mini_min_cost) > 0.0000001 else 0, o3_mini_max_cost - o3_mini_avg_cost if abs(o3_mini_max_cost - o3_mini_avg_cost) > 0.0000001 else 0]
+#     deepseek_chat_synthesis_calls += benchmark_dict[benchmark].deepseek_chat_synthesis_calls
+#     deepseek_reasoner_synthesis_calls += benchmark_dict[benchmark].deepseek_reasoner_synthesis_calls
+#     o3_mini_synthesis_calls += benchmark_dict[benchmark].o3_mini_synthesis_calls
 
-    # append error values
-    cost_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
+#     deepseek_chat_python_calls += benchmark_dict[benchmark].deepseek_chat_python_calls
+#     deepseek_reasoner_python_calls += benchmark_dict[benchmark].deepseek_reasoner_python_calls
+#     o3_mini_python_calls += benchmark_dict[benchmark].o3_mini_python_calls
 
-average_costs = np.array(average_costs)
-cost_errors = np.array(cost_errors)
+#     deepseek_chat_profile_calls += benchmark_dict[benchmark].deepseek_chat_profile_calls
+#     deepseek_reasoner_profile_calls += benchmark_dict[benchmark].deepseek_reasoner_profile_calls
+#     o3_mini_profile_calls += benchmark_dict[benchmark].o3_mini_profile_calls
 
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
+#     deepseek_chat_inspect_calls += benchmark_dict[benchmark].deepseek_chat_inspect_calls
+#     deepseek_reasoner_inspect_calls += benchmark_dict[benchmark].deepseek_reasoner_inspect_calls
+#     o3_mini_inspect_calls += benchmark_dict[benchmark].o3_mini_inspect_calls
 
-# plot bars side by side
-rects10 = ax.bar(x - width, average_costs[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
-rects11 = ax.bar(x, average_costs[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
-rects12 = ax.bar(x + width, average_costs[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
-# #ax.set_yscale("log")
+# deepseek_chat_actions = [deepseek_chat_synthesis_calls, deepseek_chat_python_calls, deepseek_chat_profile_calls, deepseek_chat_inspect_calls]
+# deepseek_reasoner_actions = [deepseek_reasoner_synthesis_calls, deepseek_reasoner_python_calls, deepseek_reasoner_profile_calls, deepseek_reasoner_inspect_calls]
+# o3_mini_actions = [o3_mini_synthesis_calls, o3_mini_python_calls, o3_mini_profile_calls, o3_mini_inspect_calls]
+
+# actions = np.array([deepseek_chat_actions, deepseek_reasoner_actions, o3_mini_actions])
+
+# # create the figure and axis
+# fig, ax = plt.subplots(figsize=(17, 5))
+
+# # plot bars side by side
+# rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="Synthesis")
+# rects17 = ax.bar(x - width / 2, actions[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="Python")
+# rects18 = ax.bar(x + width / 2, actions[:, 3], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="Inspect")
+# rects19 = ax.bar(x + 3 * width / 2, actions[:, 2], width, edgecolor="black", color= colors[3], label="Profile")
+# # #ax.set_yscale("log")
 
 # # add error bars for area range (min-max)
-# for i in range(len(x)):
+# # for i in range(len(x)):
 
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_costs[i, 0], 
-#                 yerr=[[cost_errors[i, 0][0]], [cost_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+# #     # deepseek-chat
+# #     ax.errorbar(x[i] - width, average_times[i, 0], 
+# #                 yerr=[[time_errors[i, 0][0]], [time_errors[i, 0][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
     
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_costs[i, 1], 
-#                 yerr=[[cost_errors[i, 1][0]], [cost_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_costs[i, 2], 
-#                 yerr=[[cost_errors[i, 2][0]], [cost_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-# add labels, title, and legend
-ax.set_ylabel("Cost [$]", fontsize=30)
-ax.set_xlabel("Benchmarks", fontsize=30)
-ax.set_xticks(x)
-ax.set_xlim([-0.18, 3.92])
-plt.yticks(fontsize=30)
-ax.set_xticklabels(pretty_names, fontsize=25)
-#ax.legend(fontsize=30)
-plt.tight_layout()
-
-# save the plot as pdf
-plt.savefig("average_cost_comparison.pdf")
-
-
-##########################
-### PLOT AVERAGE TIMES ###
-##########################
-
-# calculate average time
-average_times = []
-time_errors = []
-
-for benchmark in benchmarks:
-
-    # average times
-    deepseek_chat_avg_c2hlsc_time = benchmark_dict[benchmark].deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].deepseek_chat_c2hlsc_time != 999999 else 0
-    deepseek_chat_avg_agent_time = benchmark_dict[benchmark].deepseek_chat_agent_time if benchmark_dict[benchmark].deepseek_chat_agent_time != 999999 else 0
-    deepseek_chat_avg_api_downtime = benchmark_dict[benchmark].deepseek_chat_api_downtime if benchmark_dict[benchmark].deepseek_chat_api_downtime != 999999 else 0
-
-    deepseek_reasoner_avg_c2hlsc_time = benchmark_dict[benchmark].deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].deepseek_reasoner_c2hlsc_time != 999999 else 0
-    deepseek_reasoner_avg_agent_time = benchmark_dict[benchmark].deepseek_reasoner_agent_time if benchmark_dict[benchmark].deepseek_reasoner_agent_time != 999999 else 0
-    deepseek_reasoner_avg_api_downtime = benchmark_dict[benchmark].deepseek_reasoner_api_downtime if benchmark_dict[benchmark].deepseek_reasoner_api_downtime != 999999 else 0
-
-    o3_mini_avg_c2hlsc_time = benchmark_dict[benchmark].o3_mini_c2hlsc_time if benchmark_dict[benchmark].o3_mini_c2hlsc_time != 999999 else 0
-    o3_mini_avg_agent_time = benchmark_dict[benchmark].o3_mini_agent_time if benchmark_dict[benchmark].o3_mini_agent_time != 999999 else 0
-    o3_mini_avg_api_downtime = benchmark_dict[benchmark].o3_mini_api_downtime if benchmark_dict[benchmark].o3_mini_api_downtime != 999999 else 0
-
-    deepseek_chat_avg_time = (deepseek_chat_avg_c2hlsc_time + deepseek_chat_avg_agent_time - deepseek_chat_avg_api_downtime) / 60
-    deepseek_reasoner_avg_time = (deepseek_reasoner_avg_c2hlsc_time + deepseek_reasoner_avg_agent_time - deepseek_reasoner_avg_api_downtime) / 60
-    o3_mini_avg_time = (o3_mini_avg_c2hlsc_time + o3_mini_avg_agent_time - o3_mini_avg_api_downtime) / 60
-
-    average_times.append((deepseek_chat_avg_time, deepseek_reasoner_avg_time, o3_mini_avg_time))
-
-    # # min times
-    # deepseek_chat_min_c2hlsc_time = benchmark_dict[benchmark].min_deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].min_deepseek_chat_c2hlsc_time != 999999 else 0
-    # deepseek_chat_min_agent_time = benchmark_dict[benchmark].min_deepseek_chat_agent_time if benchmark_dict[benchmark].min_deepseek_chat_agent_time != 999999 else 0
-    # deepseek_chat_min_api_downtime = benchmark_dict[benchmark].min_deepseek_chat_api_downtime if benchmark_dict[benchmark].min_deepseek_chat_api_downtime != 999999 else 0
-
-    # deepseek_reasoner_min_c2hlsc_time = benchmark_dict[benchmark].min_deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].min_deepseek_reasoner_c2hlsc_time != 999999 else 0
-    # deepseek_reasoner_min_agent_time = benchmark_dict[benchmark].min_deepseek_reasoner_agent_time if benchmark_dict[benchmark].min_deepseek_reasoner_agent_time != 999999 else 0
-    # deepseek_reasoner_min_api_downtime = benchmark_dict[benchmark].min_deepseek_reasoner_api_downtime if benchmark_dict[benchmark].min_deepseek_reasoner_api_downtime != 999999 else 0
-
-    # o3_mini_min_c2hlsc_time = benchmark_dict[benchmark].min_o3_mini_c2hlsc_time if benchmark_dict[benchmark].min_o3_mini_c2hlsc_time != 999999 else 0
-    # o3_mini_min_agent_time = benchmark_dict[benchmark].min_o3_mini_agent_time if benchmark_dict[benchmark].min_o3_mini_agent_time != 999999 else 0
-    # o3_mini_min_api_downtime = benchmark_dict[benchmark].min_o3_mini_api_downtime if benchmark_dict[benchmark].min_o3_mini_api_downtime != 999999 else 0
-
-    # deepseek_chat_min_time = (deepseek_chat_min_c2hlsc_time + deepseek_chat_min_agent_time - deepseek_chat_min_api_downtime) / 60
-    # deepseek_reasoner_min_time = (deepseek_reasoner_min_c2hlsc_time + deepseek_reasoner_min_agent_time - deepseek_reasoner_min_api_downtime) / 60
-    # o3_mini_min_time = (o3_mini_min_c2hlsc_time + o3_mini_min_agent_time - o3_mini_min_api_downtime) / 60
-
-    # # max times
-    # deepseek_chat_max_c2hlsc_time = benchmark_dict[benchmark].max_deepseek_chat_c2hlsc_time if benchmark_dict[benchmark].max_deepseek_chat_c2hlsc_time != 999999 else 0
-    # deepseek_chat_max_agent_time = benchmark_dict[benchmark].max_deepseek_chat_agent_time if benchmark_dict[benchmark].max_deepseek_chat_agent_time != 999999 else 0
-    # deepseek_chat_max_api_downtime = benchmark_dict[benchmark].max_deepseek_chat_api_downtime if benchmark_dict[benchmark].max_deepseek_chat_api_downtime != 999999 else 0
-
-    # deepseek_reasoner_max_c2hlsc_time = benchmark_dict[benchmark].max_deepseek_reasoner_c2hlsc_time if benchmark_dict[benchmark].max_deepseek_reasoner_c2hlsc_time != 999999 else 0
-    # deepseek_reasoner_max_agent_time = benchmark_dict[benchmark].max_deepseek_reasoner_agent_time if benchmark_dict[benchmark].max_deepseek_reasoner_agent_time != 999999 else 0
-    # deepseek_reasoner_max_api_downtime = benchmark_dict[benchmark].max_deepseek_reasoner_api_downtime if benchmark_dict[benchmark].max_deepseek_reasoner_api_downtime != 999999 else 0
-
-    # o3_mini_max_c2hlsc_time = benchmark_dict[benchmark].max_o3_mini_c2hlsc_time if benchmark_dict[benchmark].max_o3_mini_c2hlsc_time != 999999 else 0
-    # o3_mini_max_agent_time = benchmark_dict[benchmark].max_o3_mini_agent_time if benchmark_dict[benchmark].max_o3_mini_agent_time != 999999 else 0
-    # o3_mini_max_api_downtime = benchmark_dict[benchmark].max_o3_mini_api_downtime if benchmark_dict[benchmark].max_o3_mini_api_downtime != 999999 else 0
-
-    # deepseek_chat_max_time = (deepseek_chat_max_c2hlsc_time + deepseek_chat_max_agent_time - deepseek_chat_max_api_downtime) / 60
-    # deepseek_reasoner_max_time = (deepseek_reasoner_max_c2hlsc_time + deepseek_reasoner_max_agent_time - deepseek_reasoner_max_api_downtime) / 60
-    # o3_mini_max_time = (o3_mini_max_c2hlsc_time + o3_mini_max_agent_time - o3_mini_max_api_downtime) / 60
-    
-    # # calculate the errors (difference between min/max and the average)
-    # deepseek_chat_error = [deepseek_chat_avg_time - deepseek_chat_min_time, deepseek_chat_max_time - deepseek_chat_avg_time]
-    # deepseek_reasoner_error = [deepseek_reasoner_avg_time - deepseek_reasoner_min_time, deepseek_reasoner_max_time - deepseek_reasoner_avg_time]
-    # o3_mini_error = [o3_mini_avg_time - o3_mini_min_time, o3_mini_max_time - o3_mini_avg_time]
-
-    # # append error values
-    # time_errors.append((deepseek_chat_error, deepseek_reasoner_error, o3_mini_error))
-
-average_times = np.array(average_times)
-# time_errors = np.array(time_errors)
-
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
-
-# plot bars side by side
-rects13 = ax.bar(x - width, average_times[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="DeepSeek-V3")
-rects14 = ax.bar(x, average_times[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="DeepSeek-R1")
-rects15 = ax.bar(x + width, average_times[:, 2], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="o3-mini")
-# #ax.set_yscale("log")
-
-# add error bars for area range (min-max)
-# for i in range(len(x)):
-
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_times[i, 0], 
-#                 yerr=[[time_errors[i, 0][0]], [time_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-    
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_times[i, 1], 
-#                 yerr=[[time_errors[i, 1][0]], [time_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_times[i, 2], 
-#                 yerr=[[time_errors[i, 2][0]], [time_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-# add labels, title, and legend
-ax.set_ylabel("Time [min]", fontsize=30)
-ax.set_xlabel("Benchmarks", fontsize=30)
-ax.set_xticks(x)
-ax.set_xlim([-0.18, 3.92])
-plt.yticks(fontsize=30)
-ax.set_xticklabels(pretty_names, fontsize=25)
-#ax.legend(fontsize=30)
-plt.tight_layout()
-
-# save the plot as pdf
-plt.savefig("average_time_comparison.pdf")
-
-
-####################
-### PLOT ACTIONS ###
-####################
-
-model_names = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
-x = np.arange(len(model_names))
-x = x*0.4
-# print(x)
-deepseek_chat_synthesis_calls = 0
-deepseek_reasoner_synthesis_calls = 0
-o3_mini_synthesis_calls = 0
-
-deepseek_chat_python_calls = 0
-deepseek_reasoner_python_calls = 0
-o3_mini_python_calls = 0
-
-deepseek_chat_profile_calls = 0
-deepseek_reasoner_profile_calls = 0
-o3_mini_profile_calls = 0
-
-deepseek_chat_inspect_calls = 0
-deepseek_reasoner_inspect_calls = 0
-o3_mini_inspect_calls = 0
-
-for benchmark in benchmarks:
-    
-    deepseek_chat_synthesis_calls += benchmark_dict[benchmark].deepseek_chat_synthesis_calls
-    deepseek_reasoner_synthesis_calls += benchmark_dict[benchmark].deepseek_reasoner_synthesis_calls
-    o3_mini_synthesis_calls += benchmark_dict[benchmark].o3_mini_synthesis_calls
-
-    deepseek_chat_python_calls += benchmark_dict[benchmark].deepseek_chat_python_calls
-    deepseek_reasoner_python_calls += benchmark_dict[benchmark].deepseek_reasoner_python_calls
-    o3_mini_python_calls += benchmark_dict[benchmark].o3_mini_python_calls
-
-    deepseek_chat_profile_calls += benchmark_dict[benchmark].deepseek_chat_profile_calls
-    deepseek_reasoner_profile_calls += benchmark_dict[benchmark].deepseek_reasoner_profile_calls
-    o3_mini_profile_calls += benchmark_dict[benchmark].o3_mini_profile_calls
-
-    deepseek_chat_inspect_calls += benchmark_dict[benchmark].deepseek_chat_inspect_calls
-    deepseek_reasoner_inspect_calls += benchmark_dict[benchmark].deepseek_reasoner_inspect_calls
-    o3_mini_inspect_calls += benchmark_dict[benchmark].o3_mini_inspect_calls
-
-deepseek_chat_actions = [deepseek_chat_synthesis_calls, deepseek_chat_python_calls, deepseek_chat_profile_calls, deepseek_chat_inspect_calls]
-deepseek_reasoner_actions = [deepseek_reasoner_synthesis_calls, deepseek_reasoner_python_calls, deepseek_reasoner_profile_calls, deepseek_reasoner_inspect_calls]
-o3_mini_actions = [o3_mini_synthesis_calls, o3_mini_python_calls, o3_mini_profile_calls, o3_mini_inspect_calls]
-
-actions = np.array([deepseek_chat_actions, deepseek_reasoner_actions, o3_mini_actions])
-
-# create the figure and axis
-fig, ax = plt.subplots(figsize=(17, 5))
-
-# plot bars side by side
-rects16 = ax.bar(x - 3 * width / 2, actions[:, 0], width, edgecolor="black", color= colors[0], hatch=hatches[0], label="Synthesis")
-rects17 = ax.bar(x - width / 2, actions[:, 1], width, edgecolor="black", color= colors[1], hatch=hatches[1], label="Python")
-rects18 = ax.bar(x + width / 2, actions[:, 3], width, edgecolor="black", color= colors[2], hatch=hatches[2], label="Inspect")
-rects19 = ax.bar(x + 3 * width / 2, actions[:, 2], width, edgecolor="black", color= colors[3], label="Profile")
-# #ax.set_yscale("log")
-
-# add error bars for area range (min-max)
-# for i in range(len(x)):
-
-#     # deepseek-chat
-#     ax.errorbar(x[i] - width, average_times[i, 0], 
-#                 yerr=[[time_errors[i, 0][0]], [time_errors[i, 0][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-    
-#     # deepseek-reasoner
-#     ax.errorbar(x[i], average_times[i, 1], 
-#                 yerr=[[time_errors[i, 1][0]], [time_errors[i, 1][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-#     # o3-mini
-#     ax.errorbar(x[i] + width, average_times[i, 2], 
-#                 yerr=[[time_errors[i, 2][0]], [time_errors[i, 2][1]]], 
-#                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
-
-# add labels, title, and legend
-ax.set_ylabel("Calls", fontsize=30)
-ax.set_xlabel("Models", fontsize=30)
-ax.set_xticks(x)
-plt.yticks(fontsize=30)
-ax.set_xlim([-0.21, 0.92])
-ax.set_xticklabels(model_names, fontsize=30)
-ax.legend(fontsize=30, ncol=2, loc="upper center")
-plt.tight_layout()
-
-# save the plot as pdf
-plt.savefig("actions_comparison.pdf")
-
-
-####################
-### PLOT WINNERS ###
-####################
-
-models = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
-
-target_area_dict = {
-    "compute1" : 4000, 
-    "compute2" : 4000,
-    "compute3" : 2800,
-    "compute4" : 4000,
-    "compute5" : 8000,
-    "compute6" : 7000,
-    "Cipher" : 3800,
-    "sha256_update" : 40000,
-    "present80_encryptBlock" : 10500,
-    "kmp" : 10000,
-    "filter" : 4200,
-    "needwun" : 10000
-}
-
-winners_dict = {
-    "DeepSeek-V3" : 0,
-    "DeepSeek-R1" : 0,
-    "o3-mini" : 0
-}
-
-import pprint
-
-deepseek_chat_meets_target = 0
-ds_chat_meets_tgt = {b: 0 for b in benchmarks}
-ds_chat_latency_cond = {b: 0 for b in benchmarks}
-ds_chat_second_cond = {b: 0 for b in benchmarks}
-
-deepseek_reasoner_meets_target = 0
-ds_reas_meets_tgt = {b: 0 for b in benchmarks}
-ds_reas_latency_cond = {b: 0 for b in benchmarks}
-ds_reas_second_cond = {b: 0 for b in benchmarks}
-
-o3_mini_meets_target = 0
-o3_meets_tgt = {b: 0 for b in benchmarks}
-o3_mini_latency_cond = {b: 0 for b in benchmarks}
-o3_mini_second_cond = {b: 0 for b in benchmarks}
-
-for benchmark in benchmarks:
-
-    min_latency = 999999
-    min_area = 999999
-
-    for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
-        
-        if deepseek_chat_area < min_area:
-            min_area = deepseek_chat_area
-
-        if deepseek_chat_area < target_area_dict[benchmark]:
-            
-            if benchmark_dict[benchmark].deepseek_chat_latencies[idx] < min_latency:
-                min_latency = benchmark_dict[benchmark].deepseek_chat_latencies[idx]
-
-            deepseek_chat_meets_target += 1
-            ds_chat_meets_tgt[benchmark] += 1
-
-    for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
-
-        if deepseek_reasoner_area < min_area:
-            min_area = deepseek_reasoner_area
-
-        if deepseek_reasoner_area < target_area_dict[benchmark]:
-
-            if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] < min_latency:
-                min_latency = benchmark_dict[benchmark].deepseek_reasoner_latencies[idx]
-
-            ds_reas_meets_tgt[benchmark] +=1
-            deepseek_reasoner_meets_target += 1
-
-    for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
-
-        if o3_mini_area < min_area:
-            min_area = o3_mini_area
-
-        if o3_mini_area < target_area_dict[benchmark]:
-
-            if benchmark_dict[benchmark].o3_mini_latencies[idx] < min_latency:
-                min_latency = benchmark_dict[benchmark].o3_mini_latencies[idx]
-
-            o3_meets_tgt[benchmark] += 1
-            o3_mini_meets_target += 1
-
-    
-
-
-    for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
-
-        if deepseek_chat_area < target_area_dict[benchmark]:
-            if benchmark_dict[benchmark].deepseek_chat_latencies[idx] == min_latency:
-                ds_chat_latency_cond[benchmark] += 1
-                print("DeepSeek-V3: benchmark:",benchmark,"- area:", deepseek_chat_area,"latency:", min_latency)
-        elif min_latency == 999999:
-            if deepseek_chat_area == min_area:
-                ds_chat_second_cond[benchmark] += 1
-                print("DeepSeek-V3: benchmark:",benchmark,"- area:", deepseek_chat_area,"latency:", min_latency)
-                
-
-    for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
-
-        if deepseek_reasoner_area < target_area_dict[benchmark]:
-            if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] == min_latency:
-                ds_reas_latency_cond[benchmark] += 1
-                print("DeepSeek-R1: benchmark:",benchmark,"- area:", deepseek_reasoner_area,"latency:", min_latency)
-
-        elif min_latency == 999999:
-            if deepseek_reasoner_area == min_area:
-                ds_reas_second_cond[benchmark] += 1
-                print("DeepSeek-R1: benchmark:",benchmark,"- area:", deepseek_reasoner_area,"latency:", min_latency)
-
-    for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
-
-        if o3_mini_area < target_area_dict[benchmark]:
-
-            if benchmark_dict[benchmark].o3_mini_latencies[idx] == min_latency:
-                
-                o3_mini_latency_cond[benchmark] += 1
-                print("O3-mini: benchmark:",benchmark,"- area:", o3_mini_area,"latency:", min_latency)
-        elif min_latency == 999999:
-
-            if o3_mini_area == min_area:
-                
-                o3_mini_second_cond[benchmark] += 1
-                print("O3-mini: benchmark:",benchmark,"- area:", o3_mini_area,"latency:", min_latency)
-
-    
-
-import pprint
-
-print(deepseek_chat_meets_target)
-print(deepseek_reasoner_meets_target)
-print(o3_mini_meets_target)
-
-pprint.pprint(ds_chat_meets_tgt)
-pprint.pprint(ds_reas_meets_tgt)
-pprint.pprint(o3_meets_tgt)
-
-pprint.pprint(ds_chat_latency_cond)
-pprint.pprint(ds_reas_latency_cond)
-pprint.pprint(o3_mini_latency_cond)
-
-pprint.pprint(ds_chat_second_cond)
-pprint.pprint(ds_reas_second_cond)
-pprint.pprint(o3_mini_second_cond)
-
-# print in table format with benchmarks as rows and models as columns
-print("Benchmarks\tMeets Target\tMeets Target\tMeets Target\tLatency Cond\tLatency Cond\tLatency Cond\tSecond Cond\tSecond Cond\tSecond Cond")
-
-print("Benchmarks\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini")
-for benchmark in benchmarks:
-    print(f"{benchmark}\t & {ds_chat_meets_tgt[benchmark]}\t & {ds_reas_meets_tgt[benchmark]}\t & {o3_meets_tgt[benchmark]}", end="\t &")
-    print(f"{ds_chat_latency_cond[benchmark]}\t &  { ds_reas_latency_cond[benchmark]}\t & {o3_mini_latency_cond[benchmark]}", end="\t &")
-    print(f"{ds_chat_second_cond[benchmark]}\t & {ds_reas_second_cond[benchmark]}\t & {o3_mini_second_cond[benchmark]}", end="\t\\\\\n")
-
-# add columns 
-
-
-    # deepseek_chat_areas = np.array()
-    # if deepseek_chat_areas:
-    #     print(deepseek_chat_areas)
-    #     print(np.median(deepseek_chat_areas))
-    # # pprint.pprint(benchmark_dict[benchmark].deepseek_reasoner_areas)
-    # # pprint.pprint(benchmark_dict[benchmark].o3_mini_areas)
-    # print()
-
-
-#     candidates = []
-
-#     if benchmark_dict[benchmark].deepseek_chat_area < target_area_dict[benchmark]:
-#         candidates.append(("DeepSeek-V3", benchmark_dict[benchmark].deepseek_chat_latency))
-
-#     if benchmark_dict[benchmark].deepseek_reasoner_area < target_area_dict[benchmark]:
-#         candidates.append(("DeepSeek-R1", benchmark_dict[benchmark].deepseek_reasoner_latency))
-
-#     if benchmark_dict[benchmark].o3_mini_area < target_area_dict[benchmark]:
-#         candidates.append(("o3-mini", benchmark_dict[benchmark].o3_mini_latency))
-
-#     min_latency = 999999
-#     curr_winner = ""
-
-#     if candidates:
-#         # print(f"{benchmark} by latency")
-#         # print(candidates)
-
-#         for candidate in candidates:
-#             if candidate[1] < min_latency:
-
-#                 curr_winner = candidate[0]
-#                 min_latency = candidate[1]
-        
-#     else:
-        
-#         curr_winner = "DeepSeek-V3"
-#         min_area = benchmark_dict[benchmark].deepseek_chat_area
-        
-#         if benchmark_dict[benchmark].deepseek_reasoner_area < min_area:
-#             curr_winner = "DeepSeek-R1"
-#             min_area = benchmark_dict[benchmark].deepseek_reasoner_area
-        
-#         if benchmark_dict[benchmark].o3_mini_area < min_area:
-#             curr_winner = "o3-mini"
-
-#         # print(f"{benchmark} by area")
-#         # print(benchmark_dict[benchmark].deepseek_chat_area, benchmark_dict[benchmark].deepseek_reasoner_area, benchmark_dict[benchmark].o3_mini_area)
-
-#     winners_dict[curr_winner] += 1
-#     print(f"Winner of {benchmark}: {curr_winner}")
-#     print()
+# #     # deepseek-reasoner
+# #     ax.errorbar(x[i], average_times[i, 1], 
+# #                 yerr=[[time_errors[i, 1][0]], [time_errors[i, 1][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+# #     # o3-mini
+# #     ax.errorbar(x[i] + width, average_times[i, 2], 
+# #                 yerr=[[time_errors[i, 2][0]], [time_errors[i, 2][1]]], 
+# #                 fmt="none", ecolor="black", elinewidth=1, capsize=8, markeredgewidth=1)
+
+# # add labels, title, and legend
+# ax.set_ylabel("Calls", fontsize=30)
+# ax.set_xlabel("Models", fontsize=30)
+# ax.set_xticks(x)
+# plt.yticks(fontsize=30)
+# ax.set_xlim([-0.21, 0.92])
+# ax.set_xticklabels(model_names, fontsize=30)
+# ax.legend(fontsize=30, ncol=2, loc="upper center")
+# plt.tight_layout()
+
+# # save the plot as pdf
+# plt.savefig("actions_comparison.pdf")
+
+
+# ####################
+# ### PLOT WINNERS ###
+# ####################
+
+# models = ["DeepSeek-V3", "DeepSeek-R1", "o3-mini"]
+
+# target_area_dict = {
+#     "compute1" : 4000, 
+#     "compute2" : 4000,
+#     "compute3" : 2800,
+#     "compute4" : 4000,
+#     "compute5" : 8000,
+#     "compute6" : 7000,
+#     "Cipher" : 3800,
+#     "sha256_update" : 40000,
+#     "present80_encryptBlock" : 10500,
+#     "kmp" : 10000,
+#     "filter" : 4200,
+#     "needwun" : 10000
+# }
+
+# winners_dict = {
+#     "DeepSeek-V3" : 0,
+#     "DeepSeek-R1" : 0,
+#     "o3-mini" : 0
+# }
 
 # import pprint
-# pprint.pprint(winners_dict)
+
+# deepseek_chat_meets_target = 0
+# ds_chat_meets_tgt = {b: 0 for b in benchmarks}
+# ds_chat_latency_cond = {b: 0 for b in benchmarks}
+# ds_chat_second_cond = {b: 0 for b in benchmarks}
+
+# deepseek_reasoner_meets_target = 0
+# ds_reas_meets_tgt = {b: 0 for b in benchmarks}
+# ds_reas_latency_cond = {b: 0 for b in benchmarks}
+# ds_reas_second_cond = {b: 0 for b in benchmarks}
+
+# o3_mini_meets_target = 0
+# o3_meets_tgt = {b: 0 for b in benchmarks}
+# o3_mini_latency_cond = {b: 0 for b in benchmarks}
+# o3_mini_second_cond = {b: 0 for b in benchmarks}
+
+# for benchmark in benchmarks:
+
+#     min_latency = 999999
+#     min_area = 999999
+
+#     for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
+        
+#         if deepseek_chat_area < min_area:
+#             min_area = deepseek_chat_area
+
+#         if deepseek_chat_area < target_area_dict[benchmark]:
+            
+#             if benchmark_dict[benchmark].deepseek_chat_latencies[idx] < min_latency:
+#                 min_latency = benchmark_dict[benchmark].deepseek_chat_latencies[idx]
+
+#             deepseek_chat_meets_target += 1
+#             ds_chat_meets_tgt[benchmark] += 1
+
+#     for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
+
+#         if deepseek_reasoner_area < min_area:
+#             min_area = deepseek_reasoner_area
+
+#         if deepseek_reasoner_area < target_area_dict[benchmark]:
+
+#             if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] < min_latency:
+#                 min_latency = benchmark_dict[benchmark].deepseek_reasoner_latencies[idx]
+
+#             ds_reas_meets_tgt[benchmark] +=1
+#             deepseek_reasoner_meets_target += 1
+
+#     for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
+
+#         if o3_mini_area < min_area:
+#             min_area = o3_mini_area
+
+#         if o3_mini_area < target_area_dict[benchmark]:
+
+#             if benchmark_dict[benchmark].o3_mini_latencies[idx] < min_latency:
+#                 min_latency = benchmark_dict[benchmark].o3_mini_latencies[idx]
+
+#             o3_meets_tgt[benchmark] += 1
+#             o3_mini_meets_target += 1
+
+    
+
+
+#     for idx, deepseek_chat_area in enumerate(benchmark_dict[benchmark].deepseek_chat_areas):
+
+#         if deepseek_chat_area < target_area_dict[benchmark]:
+
+#             if benchmark_dict[benchmark].deepseek_chat_latencies[idx] == min_latency:
+
+#                 ds_chat_latency_cond[benchmark] += 1
+
+#         elif min_latency == 999999:
+
+#             if deepseek_chat_area == min_area:
+                
+#                 ds_chat_second_cond[benchmark] += 1
+
+                
+
+#     for idx, deepseek_reasoner_area in enumerate(benchmark_dict[benchmark].deepseek_reasoner_areas):
+
+#         if deepseek_reasoner_area < target_area_dict[benchmark]:
+
+#             if benchmark_dict[benchmark].deepseek_reasoner_latencies[idx] == min_latency:
+                
+#                 ds_reas_latency_cond[benchmark] += 1
+
+#         elif min_latency == 999999:
+
+#             if deepseek_reasoner_area == min_area:
+                
+#                 ds_reas_second_cond[benchmark] += 1
+
+
+#     for idx, o3_mini_area in enumerate(benchmark_dict[benchmark].o3_mini_areas):
+
+#         if o3_mini_area < target_area_dict[benchmark]:
+
+#             if benchmark_dict[benchmark].o3_mini_latencies[idx] == min_latency:
+                
+#                 o3_mini_latency_cond[benchmark] += 1
+        
+#         elif min_latency == 999999:
+
+#             if o3_mini_area == min_area:
+                
+#                 o3_mini_second_cond[benchmark] += 1
+
+    
+
+# import pprint
+
+# print(deepseek_chat_meets_target)
+# print(deepseek_reasoner_meets_target)
+# print(o3_mini_meets_target)
+
+# pprint.pprint(ds_chat_meets_tgt)
+# pprint.pprint(ds_reas_meets_tgt)
+# pprint.pprint(o3_meets_tgt)
+
+# pprint.pprint(ds_chat_latency_cond)
+# pprint.pprint(ds_reas_latency_cond)
+# pprint.pprint(o3_mini_latency_cond)
+
+# pprint.pprint(ds_chat_second_cond)
+# pprint.pprint(ds_reas_second_cond)
+# pprint.pprint(o3_mini_second_cond)
+
+# # print in table format with benchmarks as rows and models as columns
+# print("Benchmarks\tMeets Target\tMeets Target\tMeets Target\tLatency Cond\tLatency Cond\tLatency Cond\tSecond Cond\tSecond Cond\tSecond Cond")
+
+# print("Benchmarks\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini\tDeepSeek-V3\tDeepSeek-R1\to3-mini")
+# for benchmark in benchmarks:
+#     print(f"{benchmark}\t{ds_chat_meets_tgt[benchmark]}\t{ds_reas_meets_tgt[benchmark]}\t{o3_meets_tgt[benchmark]}", end="\t")
+#     print(f"{ds_chat_latency_cond[benchmark]}\t{ds_reas_latency_cond[benchmark]}\t{o3_mini_latency_cond[benchmark]}", end="\t")
+#     print(f"{ds_chat_second_cond[benchmark]}\t{ds_reas_second_cond[benchmark]}\t{o3_mini_second_cond[benchmark]}")
+
+# # add columns 
+
+
+#     # deepseek_chat_areas = np.array()
+#     # if deepseek_chat_areas:
+#     #     print(deepseek_chat_areas)
+#     #     print(np.median(deepseek_chat_areas))
+#     # # pprint.pprint(benchmark_dict[benchmark].deepseek_reasoner_areas)
+#     # # pprint.pprint(benchmark_dict[benchmark].o3_mini_areas)
+#     # print()
+
+
+# #     candidates = []
+
+# #     if benchmark_dict[benchmark].deepseek_chat_area < target_area_dict[benchmark]:
+# #         candidates.append(("DeepSeek-V3", benchmark_dict[benchmark].deepseek_chat_latency))
+
+# #     if benchmark_dict[benchmark].deepseek_reasoner_area < target_area_dict[benchmark]:
+# #         candidates.append(("DeepSeek-R1", benchmark_dict[benchmark].deepseek_reasoner_latency))
+
+# #     if benchmark_dict[benchmark].o3_mini_area < target_area_dict[benchmark]:
+# #         candidates.append(("o3-mini", benchmark_dict[benchmark].o3_mini_latency))
+
+# #     min_latency = 999999
+# #     curr_winner = ""
+
+# #     if candidates:
+# #         # print(f"{benchmark} by latency")
+# #         # print(candidates)
+
+# #         for candidate in candidates:
+# #             if candidate[1] < min_latency:
+
+# #                 curr_winner = candidate[0]
+# #                 min_latency = candidate[1]
+        
+# #     else:
+        
+# #         curr_winner = "DeepSeek-V3"
+# #         min_area = benchmark_dict[benchmark].deepseek_chat_area
+        
+# #         if benchmark_dict[benchmark].deepseek_reasoner_area < min_area:
+# #             curr_winner = "DeepSeek-R1"
+# #             min_area = benchmark_dict[benchmark].deepseek_reasoner_area
+        
+# #         if benchmark_dict[benchmark].o3_mini_area < min_area:
+# #             curr_winner = "o3-mini"
+
+# #         # print(f"{benchmark} by area")
+# #         # print(benchmark_dict[benchmark].deepseek_chat_area, benchmark_dict[benchmark].deepseek_reasoner_area, benchmark_dict[benchmark].o3_mini_area)
+
+# #     winners_dict[curr_winner] += 1
+# #     print(f"Winner of {benchmark}: {curr_winner}")
+# #     print()
+
+# # import pprint
+# # pprint.pprint(winners_dict)
