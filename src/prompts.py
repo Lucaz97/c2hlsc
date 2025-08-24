@@ -16,7 +16,8 @@ Use #pragma hls_pipeline_init_interval X to pipeline loops, where X defines the 
 Pipelining increases throughput at the cost of latency. If no optimization is required, rewrite the original function without modifications.
 
 Output the modified code within ``` tags for automated processing. 
-Expect iterative refinement based on feedback and adjust the output accordingly to improve efficiency while maintaining correctness."""
+Expect iterative refinement based on feedback and adjust the output accordingly to improve efficiency while maintaining correctness.
+You will be iteratively asked to produce multiple solutions, explore different efforts to provide a good range of solutions."""
 
 # - Loop Fission: loops can be separated to increase the parallelism of the code. This can increase the area and the latency. This can be done by rewriting the code manually.
 #     - Loop Fusion: loops can be fused to reduce the number of iterations. This can reduce the area and the latency. This can be done by rewriting the code manually.
@@ -177,3 +178,49 @@ You should replace the SIZE with an upperbound of the array size.
 redefinition_prompt = """
 To solve this problem you can get rid of the function in the error as I have already defined it in my code.
 """ 
+
+final_optimization_system_prompt = """
+You are an HLS Optimization Agent tasked with optimizing a C application accelerated using High-Level Synthesis (HLS). 
+You are part of an automated agentic flow, please reply following the instructed format.
+Your goal is to find the best combination of function options that minimizes {goal} while keeping the total {constraint} as close as possible to a target value. 
+At every iteration you have three options:
+1. Synthesize a new configuration to evaluate its latency throughput and area.
+If you select this option you should replay in the following format:
+"synthesis: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>" for each function in the application.
+I will run the synthesis and provide you with the results.
+2. See one or more function options.
+If you select this option you should reply with the following format:
+"inspect: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+3. Run the a python script to solve an optimization problem using the google OR-Tools library.
+If you select this option you should reply with the following format:
+"python: '''<python_scipt_to_run>'''"
+I will run the script and provide you with the results.
+4. Run gprof on the applacation to profile the code.
+If you select this option you should reply with the following format:
+"profile"
+I will run the gprof and provide you with the results.
+5. Accept a solution and provide the final configuration.
+If you select this option you should reply with the following format:
+"solution: <function_name_1> <option_index>, <function_name_2> <option_index>, ..., <function_name_n> <option_index>"
+
+Only reply with one of the five options following the format provided.
+"""
+
+final_optimization_initial_prompt = """
+This is the call graph for the application at hand:
+{call_graph}
+
+The application has the following functions with their respective options:
+{options}
+
+{postfix_message}
+The throughput is expressed in period, the lower the better.
+
+The values reported for a function are obtained synthesizing the function in isolation, selecting the best {goal} from the child functions.
+This means that the child functions are included in the function synthesis. Selecting a different option will affect the final outcome of the parent function.
+Different options use different unrolling and pipelining factors. 
+
+The goal is to minimize the {goal} while keeping the total {constraint} as close as possible to {target}.
+
+Provide your first request:
+"""

@@ -1,0 +1,10 @@
+directive set /filter/filter:core/filter:core:conc/fir:for#1:acc#4 RESOURCE_NAME fir:for#1:acc#4:rg
+directive set /filter/filter:core/filter:core:conc/iir:iir:acc#1 RESOURCE_NAME fir:for#1:acc#4:rg
+directive set /filter/filter:core/filter:core:conc/fir:for#1:acc RESOURCE_NAME fir:for#1:acc:rg
+directive set /filter/filter:core/filter:core:conc/iir:for#1-1:acc#1 RESOURCE_NAME fir:for#1:acc:rg
+directive set /filter/filter:core/filter:core:conc/fir:for#1:acc#5 RESOURCE_NAME fir:for#1:acc#5:rg
+directive set /filter/filter:core/filter:core:conc/iir:for#2-1:acc#1 RESOURCE_NAME fir:for#1:acc#5:rg
+directive set /filter/filter:core/filter:core:conc/fir:for#1-5:acc#1 RESOURCE_NAME fir:for#1-5:acc#1:rg
+directive set /filter/filter:core/filter:core:conc/iir:for#2-2:acc#1 RESOURCE_NAME fir:for#1-5:acc#1:rg
+directive set /filter/filter:core/filter:core:conc/fir:for#1:acc#7 RESOURCE_NAME fir:for#1:acc#7:rg
+directive set /filter/filter:core/filter:core:conc/iir:for#2:acc RESOURCE_NAME fir:for#1:acc#7:rg
