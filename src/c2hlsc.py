@@ -900,7 +900,19 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
-                error = log.split("# Error:")[1]
+                # Get all the errors in the log without the first split(logs before the first error)
+                errors = log.split("# Error:")[1:]
+
+                error = errors[1]
+                
+                # Get the error that is not an internal assertion failed
+                for i, err in enumerate(errors):
+                    if "internal assertion failed" in err:
+                        continue
+                    else:
+                        error = err
+                        break
+
                 print("Error: ", error)
                 if "Floating-point"in error:
                     error += floating_point_prompt
@@ -969,7 +981,19 @@ def C2HLSC (cfg, optimize=False):
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
-                error = log.split("# Error:")[1]
+                # Get all the errors in the log without the first split(logs before the first error)
+                errors = log.split("# Error:")[1:]
+
+                error = errors[1]
+                
+                # Get the error that is not an internal assertion failed
+                for i, err in enumerate(errors):
+                    if "internal assertion failed" in err:
+                        continue
+                    else:
+                        error = err
+                        break
+
                 print("Error: ", error, flush=True)
             else:
                 print(f"{cfg.top_function} is correct, does not need any changes",flush=True)
