@@ -158,6 +158,15 @@ you do not need to include any lib I will include the following:
 #include "../include/ac_fixed.h"
 """
 
+type_casting_prompt = """
+You can cast between types using explicit casts to fix this.
+
+uint8_t *ptr = (uint8_t *)&value;
+
+If there are malloc calls you can replace them with static arrays if the size is known at compile time. If there are malloc calls in the child function, remove the mallocs and give the new function with <child_fuction_name>_no_malloc as name. 
+
+"""
+
 pointer_prompt = """
 You can get rid of pointers in the interface using the array notation like
 

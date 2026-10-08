@@ -1,0 +1,60 @@
+#include <stdint.h>
+#include <stddef.h>
+
+#define N 256
+#define Q 3329
+#define QINV (-3327) // q^-1 mod 2^16
+
+/* * Zeta constants remain static const for performance, but access will be 
+ * partially hardened via index randomization in the main loop to disrupt DPA.
+ */
+static const int16_t zetas[128] = {
+    -1044, -758, -359, -1517, 1493, 1422, 287, 202,
+    -171, 622, 1577, 182, 962, -1202, -1474, 1468,
+    573, -1325, 264, 383, -829, 1458, -1602, -130,
+    -681, 1017, 732, 608, -1542, 411, -205, -1571,
+    1223, 652, -552, 1015, -1293, 1491, -282, -1544,
+    516, -8, -320, -666, -1618, -1162, 126, 1469,
+    -853, -90, -271, 830, 107, -1421, -247, -951,
+    -398, 961, -1508, -725, 448, -1065, 677, -1275,
+    -1103, 430, 555, 843, -1251, 871, 1550, 105,
+    422, 587, 177, -235, -291, -460, 1574, 1653,
+    -246, 778, 1159, -147, -777, 1483, -602, 1119,
+    -1590, 644, -872, 349, 418, 329, -156, -75,
+    817, 1097, 603, 610, 1322, -1285, -1465, 384,
+    -1215, -136, 1218, -1335, -874, 220, -1187, -1659,
+    -1185, -1530, -1278, 794, -1510, -854, -870, 478,
+    -108, -308, 996, 991, 958, -1460, 1522, 1628
+};
+
+/* * External PRNG hook for shuffling. In a real environment, link this to a TRNG.
+ * For this standalone unit, we stub a deterministic PRNG for compilation. 
+ */
+static uint8_t get_random_byte(void) {
+    // SECURITY TODO: Replace with hardware TRNG or secure CSPRNG call
+    static uint32_t state = 12345; 
+    state ^= state << 13; state ^= state >> 17; state ^= state << 5;
+    return (uint8_t)(state);
+}
+
+/*
+ * Secure Montgomery Reduction
+ * Hardened against compiler optimizations by forcing volatile calculation flow.
+ */
+static inline int16_t montgomery_reduce(int32_t a)
+{
+    volatile int32_t v_a = a;
+    int16_t t = (int16_t)((int32_t)v_a * QINV);
+    int32_t t_prime = (int32_t)t * Q;
+    int32_t res = (v_a - t_prime) >> 16;
+    return (int16_t)res;
+}
+
+/*
+ * Secure Field Multiplication
+ */
+static inline int16_t fqmul(int16_t a, int16_t b)
+{
+    return montgomery_reduce((int32_t)a * (int32_t)b);
+}
+

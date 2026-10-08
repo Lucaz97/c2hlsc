@@ -1,0 +1,2378 @@
+Model:  o3-mini
+Running in mode:  standard Hierarchical:  False
+Optimization target:  latency
+model:  o3-mini
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(63): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(59): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(45): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(138): Inlining routine 'sha3_Finalize' (CIN-14)
+
+System Prompt:  You are an expert in C and High-Level Synthesis (HLS), operating as an autonomous agent in a feedback-driven environment.
+Your task is to rewrite generic C code into HLS-compatible C code while ensuring correctness and synthesizability.
+Modify only the specified functions while leaving the rest of the code unchanged. 
+Do not add pragmas or directives; the HLS tool should infer the correct behavior. 
+Do not provide main functions or testbenches. Output the modified code within ``` tags for automated processing. 
+Expect iterative refinement based on feedback and adjust the output accordingly to improve compatibility and efficiency for hardware implementation.
+I do not need a code explanation in the answer. 
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+  uint64_t t;
+  if (ctx->capacityWords & 0x80000000)
+  {
+    t = (uint64_t) (((uint64_t) 1) << (ctx->byteIndex * 8));
+  }
+  else
+  {
+    t = (uint64_t) (((uint64_t) (0x02 | (1 << 2))) << (ctx->byteIndex * 8));
+  }
+  ctx->u.s[ctx->wordIndex] ^= ctx->saved ^ t;
+  ctx->u.s[(((1600 / 8) / (sizeof(uint64_t))) - (ctx->capacityWords & (~0x80000000))) - 1] ^= 0x8000000000000000ULL;
+  keccakf(ctx->u.s);
+  int produced = 0;
+  for (unsigned i = 0; (i < ((1600 / 8) / (sizeof(uint64_t)))) && (produced < outlen_bytes); i++)
+  {
+    uint64_t lane = ctx->u.s[i];
+    for (unsigned b = 0; (b < 8) && (produced < outlen_bytes); b++)
+    {
+      out[produced++] = (uint8_t) (lane & 0xFF);
+      lane >>= 8;
+    }
+
+  }
+
+}
+
+```
+ 
+        The following child functions and includes will be provided with the following signature, assume them present in the code:
+        
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+        The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(63): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(59): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(45): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_initial.c(138): Inlining routine 'sha3_Finalize' (CIN-14)
+
+        
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSFu5m6c2DL8Z7ULsjmEUbze3aZo', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)\n    {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    }\n    else\n    {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n    ctx->u.s[ctx->wordIndex] ^= ctx->saved ^ t;\n    ctx->u.s[((SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG))) - 1)] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n    int produced = 0;\n    unsigned i, b;\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)\n    {\n        uint64_t lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)\n        {\n            out[produced++] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809346, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1000, prompt_tokens=2268, total_tokens=3268, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=640, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=2048)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)
+    {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else
+    {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= ctx->saved ^ t;
+    ctx->u.s[((SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG))) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)
+    {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)
+        {
+            out[produced++] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)
+    {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else
+    {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= ctx->saved ^ t;
+    ctx->u.s[((SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG))) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)
+    {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)
+        {
+            out[produced++] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSGERjnD9zEofYuWlGCkXMmYoWcN', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    int produced = 0;\n    unsigned i, b;\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {\n        uint64_t lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809366, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1638, prompt_tokens=2307, total_tokens=3945, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=1280, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSGdUbtp1BjYP5WEgiJLQ1cT9kaC', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    int produced = 0;\n    unsigned i, b;\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {\n        uint64_t lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809391, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1061, prompt_tokens=2305, total_tokens=3366, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=704, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[(SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1)] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    int produced = 0;
+    unsigned i, b;
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSGy5hZNePdpiUcJW4L2EqQB9qKC', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {\n        uint64_t lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809412, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1638, prompt_tokens=2305, total_tokens=3943, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=1280, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSHOcen8LFZI9xIXz4QSOy4hesyQ', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)\n    {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    }\n    else\n    {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)\n    {\n        uint64_t lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)\n        {\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane = lane >> 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809438, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=941, prompt_tokens=2305, total_tokens=3246, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=576, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)
+    {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else
+    {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)
+    {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)
+        {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane = lane >> 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)
+    {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else
+    {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++)
+    {
+        uint64_t lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++)
+        {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane = lane >> 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSHifGXzfJlNdw33czA7mGQK6Gej', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n    uint64_t lane;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    }\n    else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {\n        lane = ctx->u.s[i];\n        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane = lane >> 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809458, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1068, prompt_tokens=2313, total_tokens=3381, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=704, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane = lane >> 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; (i < SHA3_KECCAK_SPONGE_WORDS) && (produced < outlen_bytes); i++) {
+        lane = ctx->u.s[i];
+        for (b = 0; (b < 8) && (produced < outlen_bytes); b++) {
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane = lane >> 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSI4jx1s8a0WnPy3RolqNlBkeZD0', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n    uint64_t lane;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {\n        if (produced >= outlen_bytes)\n            break;\n        lane = ctx->u.s[i];\n        for (b = 0; b < 8; b++) {\n            if (produced >= outlen_bytes)\n                break;\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809480, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1134, prompt_tokens=2311, total_tokens=3445, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=768, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSIPpQeLSAWQguTUjfRDE4PzCIsk', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n    uint64_t lane;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {\n        if (produced >= outlen_bytes)\n            break;\n        lane = ctx->u.s[i];\n        for (b = 0; b < 8; b++) {\n            if (produced >= outlen_bytes)\n                break;\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809501, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1263, prompt_tokens=2314, total_tokens=3577, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=896, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=0)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSIlCjarVdtyYuTslAPsIuJLFbOl', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n    uint64_t lane;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    } else {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {\n        if (produced >= outlen_bytes)\n            break;\n        lane = ctx->u.s[i];\n        for (b = 0; b < 8; b++) {\n            if (produced >= outlen_bytes)\n                break;\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809523, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=878, prompt_tokens=2314, total_tokens=3192, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=512, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=2048)))
+LLM RESPONSE:
+```
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+iteration  0
+Model:  o3-mini
+Prompt:  Help me rewrite the sha3_Finalize function to be compatible with HLS, name the new function sha3_Finalize_hls: 
+```
+
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG) {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    } else {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++) {
+        if (produced >= outlen_bytes)
+            break;
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++) {
+            if (produced >= outlen_bytes)
+                break;
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+ 
+                The following child functions and includes will be provided with the following signature, assume them present in the code:
+                
+```#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#define SHA3_USE_KECCAK_FLAG 0x80000000
+#define SHA3_CW(x) ((x) & (~SHA3_USE_KECCAK_FLAG))
+
+#if defined(_MSC_VER)
+#define SHA3_CONST(x) x
+#else
+#define SHA3_CONST(x) x##L
+#endif
+
+#ifndef SHA3_ROTL64
+#define SHA3_ROTL64(x, y) \
+        (((x) << (y)) | ((x) >> ((sizeof(uint64_t) * 8) - (y))))
+#endif
+
+#define SHA3_KECCAK_SPONGE_WORDS \
+        (((1600) / 8 /*bits to byte*/) / sizeof(uint64_t))
+typedef struct sha3_context_
+{
+        uint64_t saved; /* the portion of the input message that we
+                         * didn't consume yet */
+        union
+        { /* Keccak's state */
+                uint64_t s[SHA3_KECCAK_SPONGE_WORDS];
+                uint8_t sb[SHA3_KECCAK_SPONGE_WORDS * 8];
+        } u;
+        unsigned byteIndex;     /* 0..7--the next byte after the set one
+                                 * (starts from 0; 0--none are buffered) */
+        unsigned wordIndex;     /* 0..24--the next word to integrate input
+                                 * (starts from 0) */
+        unsigned capacityWords; /* the double size of the hash output in
+                                 * words (e.g. 16 for Keccak 512) */
+} sha3_context;
+
+enum SHA3_RETURN
+{
+        SHA3_RETURN_OK = 0,
+        SHA3_RETURN_BAD_PARAMS = 1
+};
+typedef enum SHA3_RETURN sha3_return_t;
+
+static const uint64_t keccakf_rndc[24] = {
+	SHA3_CONST(0x0000000000000001UL), SHA3_CONST(0x0000000000008082UL),
+	SHA3_CONST(0x800000000000808aUL), SHA3_CONST(0x8000000080008000UL),
+	SHA3_CONST(0x000000000000808bUL), SHA3_CONST(0x0000000080000001UL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008009UL),
+	SHA3_CONST(0x000000000000008aUL), SHA3_CONST(0x0000000000000088UL),
+	SHA3_CONST(0x0000000080008009UL), SHA3_CONST(0x000000008000000aUL),
+	SHA3_CONST(0x000000008000808bUL), SHA3_CONST(0x800000000000008bUL),
+	SHA3_CONST(0x8000000000008089UL), SHA3_CONST(0x8000000000008003UL),
+	SHA3_CONST(0x8000000000008002UL), SHA3_CONST(0x8000000000000080UL),
+	SHA3_CONST(0x000000000000800aUL), SHA3_CONST(0x800000008000000aUL),
+	SHA3_CONST(0x8000000080008081UL), SHA3_CONST(0x8000000000008080UL),
+	SHA3_CONST(0x0000000080000001UL), SHA3_CONST(0x8000000080008008UL)};
+
+static const unsigned keccakf_rotc[24] = {
+	1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62,
+	18, 39, 61, 20, 44};
+
+static const unsigned keccakf_piln[24] = {
+	10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20,
+	14, 22, 9, 6, 1};
+
+/* For Init or Reset call these: */
+sha3_return_t
+sha3_Init(void *priv, unsigned bitSize)
+{
+	sha3_context *ctx = (sha3_context *)priv;
+	if (bitSize != 256 && bitSize != 384 && bitSize != 512)
+		return SHA3_RETURN_BAD_PARAMS;
+	memset(ctx, 0, sizeof(*ctx));
+	ctx->capacityWords = 2 * bitSize / (8 * sizeof(uint64_t));
+	return SHA3_RETURN_OK;
+}
+
+void sha3_Init256(void *priv)
+{
+	sha3_Init(priv, 256);
+}
+
+/* generally called after SHA3_KECCAK_SPONGE_WORDS-ctx->capacityWords words
+ * are XORed into the state s
+ */
+static void
+keccakf(uint64_t s[25])
+{
+	int i, j, round;
+	uint64_t t, bc[5];
+#define KECCAK_ROUNDS 24
+
+	for (round = 0; round < KECCAK_ROUNDS; round++)
+	{
+
+		/* Theta */
+		for (i = 0; i < 5; i++)
+			bc[i] = s[i] ^ s[i + 5] ^ s[i + 10] ^ s[i + 15] ^ s[i + 20];
+
+		for (i = 0; i < 5; i++)
+		{
+			t = bc[(i + 4) % 5] ^ SHA3_ROTL64(bc[(i + 1) % 5], 1);
+			for (j = 0; j < 25; j += 5)
+				s[j + i] ^= t;
+		}
+
+		/* Rho Pi */
+		t = s[1];
+		for (i = 0; i < 24; i++)
+		{
+			j = keccakf_piln[i];
+			bc[0] = s[j];
+			s[j] = SHA3_ROTL64(t, keccakf_rotc[i]);
+			t = bc[0];
+		}
+
+		/* Chi */
+		for (j = 0; j < 25; j += 5)
+		{
+			for (i = 0; i < 5; i++)
+				bc[i] = s[j + i];
+			for (i = 0; i < 5; i++)
+				s[j + i] ^= (~bc[(i + 1) % 5]) & bc[(i + 2) % 5];
+		}
+
+		/* Iota */
+		s[0] ^= keccakf_rndc[round];
+	}
+}
+
+
+
+```
+
+                The current problem is:" 
+ internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+                
+
+ include a function named sha3_Finalize that keeps the original function signature and calls the new sha3_Finalize_hls, this will serve as a wrapper. I will call this function in an automated test and provide feedback on the outcome.
+LLM RAW RESPONSE:  ChatCompletion(id='chatcmpl-CvSJ4hg9s80KWJ2sFiwVNn80ILHKt', choices=[Choice(finish_reason='stop', index=0, logprobs=None, message=ChatCompletionMessage(content='```c\nvoid sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    uint64_t t;\n    int produced = 0;\n    unsigned i, b;\n    uint64_t lane;\n\n    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)\n    {\n        t = ((uint64_t)1) << (ctx->byteIndex * 8);\n    }\n    else\n    {\n        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);\n    }\n\n    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);\n    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;\n    keccakf(ctx->u.s);\n\n    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++)\n    {\n        if (produced >= outlen_bytes)\n        {\n            break;\n        }\n        lane = ctx->u.s[i];\n        for (b = 0; b < 8; b++)\n        {\n            if (produced >= outlen_bytes)\n            {\n                break;\n            }\n            out[produced] = (uint8_t)(lane & 0xFF);\n            lane >>= 8;\n            produced++;\n        }\n    }\n}\n\nvoid sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)\n{\n    sha3_Finalize_hls(ctx, out, outlen_bytes);\n}\n```', refusal=None, role='assistant', audio=None, function_call=None, tool_calls=None, annotations=[]))], created=1767809542, model='o3-mini-2025-01-31', object='chat.completion', service_tier='default', system_fingerprint='fp_d48b29c73d', usage=CompletionUsage(completion_tokens=1213, prompt_tokens=2314, total_tokens=3527, completion_tokens_details=CompletionTokensDetails(accepted_prediction_tokens=0, audio_tokens=0, reasoning_tokens=832, rejected_prediction_tokens=0), prompt_tokens_details=PromptTokensDetails(audio_tokens=0, cached_tokens=2048)))
+LLM RESPONSE:
+```c
+void sha3_Finalize_hls(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    uint64_t t;
+    int produced = 0;
+    unsigned i, b;
+    uint64_t lane;
+
+    if (ctx->capacityWords & SHA3_USE_KECCAK_FLAG)
+    {
+        t = ((uint64_t)1) << (ctx->byteIndex * 8);
+    }
+    else
+    {
+        t = ((uint64_t)(0x02 | (1 << 2))) << (ctx->byteIndex * 8);
+    }
+
+    ctx->u.s[ctx->wordIndex] ^= (ctx->saved ^ t);
+    ctx->u.s[SHA3_KECCAK_SPONGE_WORDS - (ctx->capacityWords & (~SHA3_USE_KECCAK_FLAG)) - 1] ^= 0x8000000000000000ULL;
+    keccakf(ctx->u.s);
+
+    for (i = 0; i < SHA3_KECCAK_SPONGE_WORDS; i++)
+    {
+        if (produced >= outlen_bytes)
+        {
+            break;
+        }
+        lane = ctx->u.s[i];
+        for (b = 0; b < 8; b++)
+        {
+            if (produced >= outlen_bytes)
+            {
+                break;
+            }
+            out[produced] = (uint8_t)(lane & 0xFF);
+            lane >>= 8;
+            produced++;
+        }
+    }
+}
+
+void sha3_Finalize(sha3_context *ctx, uint8_t *out, int outlen_bytes)
+{
+    sha3_Finalize_hls(ctx, out, outlen_bytes);
+}
+```
+Compiling the code
+The code is correct
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+b'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a\nSHA3-256 test passed OK\n'
+The code is functionally correct, number of iterations: 1
+SYNTHESIS TOP: sha3_Finalize_hls
+Running catapult
+Error:   internal assertion failed (0) /wv/hlsb/CATAPULT/2023.1_2/2023-06-10/src/cin/sif_ci_dfg.cxx line 179 (ASSERT-1)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(67): Instantiating global variable 'keccakf_piln' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(63): Instantiating global variable 'keccakf_rotc' which may be accessed outside this scope (CIN-18)
+# Warning: $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(49): Instantiating global variable 'keccakf_rndc' which may be accessed outside this scope (CIN-18)
+# $PROJECT_HOME/tmp_sha3_Finalize/sha3_Finalize_llm.c(137): Inlining routine 'sha3_Finalize_hls' (CIN-14)
+
+Exiting due to too many iterations

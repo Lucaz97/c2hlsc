@@ -1,0 +1,127 @@
+int sampler_gaussian(uint8_t buf[512], size_t *ptr, uint8_t state_bytes[256])
+{
+    static const uint32_t dist[] = {
+        10745844u, 3068844u, 3741698u,
+        5559083u, 1580863u, 8248194u,
+        2260429u, 13669192u, 2736639u,
+        708981u, 4421575u, 10046180u,
+        169348u, 7122675u, 4136815u,
+        30538u, 13063405u, 7650655u,
+        4132u, 14505003u, 7826148u,
+        417u, 16768101u, 11363290u,
+        31u, 8444042u, 8086568u,
+        1u, 12844466u, 265321u,
+        0u, 1232676u, 13644283u,
+        0u, 38047u, 9111839u,
+        0u, 870u, 6138264u,
+        0u, 14u, 12545723u,
+        0u, 0u, 3104126u,
+        0u, 0u, 28824u,
+        0u, 0u, 198u,
+        0u, 0u, 1u};
+
+    uint32_t v0, v1, v2, hi;
+    uint64_t lo;
+    size_t u;
+    int z;
+
+    lo = prng_get_u64(buf, ptr, state_bytes);
+    hi = prng_get_u8(buf, ptr, state_bytes);
+    v0 = (uint32_t)lo & 0xFFFFFF;
+    v1 = (uint32_t)(lo >> 24) & 0xFFFFFF;
+    v2 = (uint32_t)(lo >> 48) | (hi << 16);
+
+    z = 0;
+    for (u = 0; u < (sizeof dist) / sizeof(dist[0]); u += 3)
+    {
+        uint32_t w0, w1, w2, cc;
+
+        w0 = dist[u + 2];
+        w1 = dist[u + 1];
+        w2 = dist[u + 0];
+        cc = (v0 - w0) >> 31;
+        cc = (v1 - w1 - cc) >> 31;
+        cc = (v2 - w2 - cc) >> 31;
+        z += (int)cc;
+    }
+    return z;
+}
+
+static inline int64_t
+fpr_trunc(fpr x)
+{
+    uint64_t t, xu;
+    int e, cc;
+
+    e = (int)(x >> 52) & 0x7FF;
+    xu = ((x << 10) | ((uint64_t)1 << 62)) & (((uint64_t)1 << 63) - 1);
+    cc = 1085 - e;
+    xu = fpr_ursh(xu, cc & 63);
+
+    xu &= -(uint64_t)((uint32_t)(cc - 64) >> 31);
+
+    t = x >> 63;
+    xu = (xu ^ -t) + t;
+
+    /* Catapult-safe: avoid *(int64_t*)&xu */
+    return (int64_t)xu;
+}
+
+uint64_t
+fpr_expm_p63(fpr x, fpr ccs)
+{
+    static const uint64_t C[] = {
+        0x00000004741183A3u,
+        0x00000036548CFC06u,
+        0x0000024FDCBF140Au,
+        0x0000171D939DE045u,
+        0x0000D00CF58F6F84u,
+        0x000680681CF796E3u,
+        0x002D82D8305B0FEAu,
+        0x011111110E066FD0u,
+        0x0555555555070F00u,
+        0x155555555581FF00u,
+        0x400000000002B400u,
+        0x7FFFFFFFFFFF4800u,
+        0x8000000000000000u};
+
+    uint64_t z, y;
+    unsigned u;
+    uint32_t z0, z1, y0, y1;
+    uint64_t a, b;
+
+    y = C[0];
+    z = (uint64_t)fpr_trunc(fpr_mul(x, fpr_ptwo63)) << 1;
+    for (u = 1; u < (sizeof C) / sizeof(C[0]); u++)
+    {
+        uint64_t c;
+
+        z0 = (uint32_t)z;
+        z1 = (uint32_t)(z >> 32);
+        y0 = (uint32_t)y;
+        y1 = (uint32_t)(y >> 32);
+        a = ((uint64_t)z0 * (uint64_t)y1) + (((uint64_t)z0 * (uint64_t)y0) >> 32);
+        b = ((uint64_t)z1 * (uint64_t)y0);
+        c = (a >> 32) + (b >> 32);
+        c += (((uint64_t)(uint32_t)a + (uint64_t)(uint32_t)b) >> 32);
+        c += (uint64_t)z1 * (uint64_t)y1;
+        y = C[u] - c;
+    }
+
+    z = (uint64_t)fpr_trunc(fpr_mul(ccs, fpr_ptwo63)) << 1;
+    z0 = (uint32_t)z;
+    z1 = (uint32_t)(z >> 32);
+    y0 = (uint32_t)y;
+    y1 = (uint32_t)(y >> 32);
+    a = ((uint64_t)z0 * (uint64_t)y1) + (((uint64_t)z0 * (uint64_t)y0) >> 32);
+    b = ((uint64_t)z1 * (uint64_t)y0);
+    y = (a >> 32) + (b >> 32);
+    y += (((uint64_t)(uint32_t)a + (uint64_t)(uint32_t)b) >> 32);
+    y += (uint64_t)z1 * (uint64_t)y1;
+
+    return y;
+}
+
+
+
+

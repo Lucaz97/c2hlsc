@@ -1,0 +1,201 @@
+void trim_inplace(char s[])
+{
+    /* trim right */
+    int len = (int)strlen(s);
+    while (len > 0 && isspace((unsigned char)s[len - 1])) {
+        s[len - 1] = '\0';
+        len--;
+    }
+    /* trim left */
+    int i = 0;
+    while (s[i] && isspace((unsigned char)s[i])) {
+        i++;
+    }
+    if (i > 0) {
+        int j = 0;
+        while (s[i]) {
+            s[j++] = s[i++];
+        }
+        s[j] = '\0';
+    }
+}
+
+/* Parse up to max_len numbers from a string into arr[].
+ * Implementation uses sscanf + %n so we don’t need strtok().
+ */
+size_t parse_fpr_array(const char str[], fpr arr[], size_t max_len)
+{
+    size_t count = 0;
+    int pos = 0;
+
+    while (count < max_len) {
+        double v = 0.0;
+        int consumed = 0;
+
+        /* Skip leading spaces manually */
+        while (str[pos] && isspace((unsigned char)str[pos])) {
+            pos++;
+        }
+        if (!str[pos]) {
+            break;
+        }
+
+        /* Read one double and how many chars were consumed */
+        if (sscanf(str + pos, "%lf%n", &v, &consumed) != 1 || consumed <= 0) {
+            break;
+        }
+        arr[count++] = (fpr)v;
+        pos += consumed;
+    }
+    return count;
+}
+
+int run_fft_test(unsigned test_num, unsigned logn, size_t n,
+                        const fpr input[], const fpr expected_fft[],
+                        int have_expected)
+{
+    fpr work[MAX_N];
+
+    if (n > MAX_N) {
+        printf("  Test %3u: SKIP (n=%zu > MAX_N=%d)\n", test_num, n, MAX_N);
+        return 0;
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        work[i] = input[i];
+    }
+
+    /* Only simulate FFT */
+    falcon_FFT(work, logn);
+
+    if (!have_expected) {
+        /* If no expected FFT provided, just print a short preview */
+        printf("  Test %3u: FFT done. First 8 values:\n", test_num);
+        size_t m = (n < 8) ? n : 8;
+        for (size_t i = 0; i < m; i++) {
+            printf("    [%zu] %.17g\n", i, (double)work[i]);
+        }
+        return 1;
+    }
+
+    /* Verify vs expected FFT output */
+    int pass = 1;
+    double max_error = 0.0;
+
+    for (size_t i = 0; i < n; i++) {
+        double err = fabs((double)work[i] - (double)expected_fft[i]);
+        if (err > max_error) {
+            max_error = err;
+        }
+        if (err > EPSILON) {
+            pass = 0;
+        }
+    }
+
+    if (!pass) {
+        printf("  Test %3u: FAIL (max_error = %.3e)\n", test_num, max_error);
+    } else if (test_num % 10 == 0) {
+        printf("  Test %3u: PASS (max_error = %.3e)\n", test_num, max_error);
+    }
+
+    return pass;
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2) {
+        printf("Usage: %s <kat_file>\n", argv[0]);
+        return 1;
+    }
+
+    FILE *fp = fopen(argv[1], "r");
+    if (!fp) {
+        printf("Error: Cannot open file %s\n", argv[1]);
+        return 1;
+    }
+
+    printf("\n");
+    printf("╔════════════════════════════════════════════════╗\n");
+    printf("║            Falcon FFT-only KAT Runner          ║\n");
+    printf("║            (simulates falcon_FFT only)         ║\n");
+    printf("╚════════════════════════════════════════════════╝\n");
+    printf("\n");
+
+    char line[65536];
+    unsigned test_count = 0, pass_count = 0, fail_count = 0;
+
+    unsigned count = 0;
+    unsigned logn = 0;
+    size_t n = 0;
+
+    fpr input[MAX_N];
+    fpr fft_output[MAX_N];
+
+    int have_input = 0;
+    int have_fft_output = 0;
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (line[0] == '#' || line[0] == '\n') {
+            continue;
+        }
+
+        /* Parse "key = value" */
+        char key[256];
+        char value[65000];
+
+        /* Allow spaces around '=' */
+        if (sscanf(line, " %255[^=]=%64999[^\n]", key, value) != 2) {
+            continue;
+        }
+
+        trim_inplace(key);
+        trim_inplace(value);
+
+        if (strcmp(key, "count") == 0) {
+            count = (unsigned)strtoul(value, NULL, 10);
+        } else if (strcmp(key, "logn") == 0) {
+            logn = (unsigned)strtoul(value, NULL, 10);
+        } else if (strcmp(key, "n") == 0) {
+            n = (size_t)strtoul(value, NULL, 10);
+        } else if (strcmp(key, "input") == 0) {
+            parse_fpr_array(value, input, MAX_N);
+            have_input = 1;
+        } else if (strcmp(key, "fft_output") == 0) {
+            parse_fpr_array(value, fft_output, MAX_N);
+            have_fft_output = 1;
+
+            /* Once we have fft_output, we treat it as end-of-test and run FFT */
+            test_count++;
+
+            if (have_input) {
+                int ok = run_fft_test(count, logn, n, input, fft_output, 1);
+                if (ok) pass_count++;
+                else fail_count++;
+            } else {
+                printf("  Test %3u: SKIP (missing input)\n", count);
+                fail_count++;
+            }
+
+            /* Reset for next test block */
+            have_input = 0;
+            have_fft_output = 0;
+        }
+    }
+
+    fclose(fp);
+
+    printf("\n");
+    printf("Processing complete. Total tests processed: %u\n", test_count);
+    printf("\n");
+    printf("╔════════════════════════════════════════════════╗\n");
+    printf("║                 SUMMARY                        ║\n");
+    printf("╠════════════════════════════════════════════════╣\n");
+    printf("║  Total Tests:  %-3u                            ║\n", test_count);
+    printf("║  Passed:       %-3u                            ║\n", pass_count);
+    printf("║  Failed:       %-3u                            ║\n", fail_count);
+    printf("║  Success Rate: %.1f%%                         ║\n",
+           test_count ? (100.0 * (double)pass_count / (double)test_count) : 0.0);
+    printf("╚════════════════════════════════════════════════╝\n");
+
+    return (fail_count == 0) ? 0 : 1;
+}

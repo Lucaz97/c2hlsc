@@ -1,0 +1,42 @@
+void ntt(int16_t r[N])
+{
+    unsigned int len, start, j;
+    unsigned int k = 1;           /* twiddle-factor index */
+    int16_t      zeta;
+    UBUResult    res;
+
+    /* Cooley-Tukey decimation-in-time: stages from len=128 down to len=2 */
+    for (len = 128; len >= 2; len >>= 1)
+    {
+        for (start = 0; start < N; start = j + len)
+        {
+            zeta = zetas[k++];
+
+            for (j = start; j < start + len; j++)
+            {
+                /*
+                 * One UBU call replaces:
+                 *   t          = fqmul(zeta, r[j + len]);
+                 *   r[j + len] = r[j] - t;
+                 *   r[j]       = r[j] + t;
+                 *
+                 * a_in / b_in are architecturally irrelevant in MODE_BUTTERFLY;
+                 * passing 0 keeps synthesis tools from inferring latches and
+                 * makes the dead inputs explicit.
+                 */
+                res = unified_butterfly_unit(
+                    MODE_BUTTERFLY,
+                    r[j],           /* lower arm            */
+                    r[j + len],     /* upper arm            */
+                    zeta,           /* twiddle factor       */
+                    (int16_t)0,     /* a_in — unused        */
+                    (int16_t)0      /* b_in — unused        */
+                );
+
+                r[j]       = res.out_lower;
+                r[j + len] = res.out_upper;
+            }
+        }
+    }
+}
+

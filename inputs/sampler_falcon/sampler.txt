@@ -1,0 +1,85 @@
+int sampler(void *ctx, fpr mu, fpr isigma)
+{
+    sampler_context *spc;
+    int s;
+    fpr r, dss, ccs;
+
+    spc = ctx;
+
+    /*
+     * Center is mu. We compute mu = s + r where s is an integer
+     * and 0 <= r < 1.
+     */
+    s = (int)fpr_floor(mu);
+    r = fpr_sub(mu, fpr_of(s));
+
+    /*
+     * dss = 1/(2*sigma^2) = 0.5*(isigma^2).
+     */
+    dss = fpr_half(fpr_sqr(isigma));
+
+    /*
+     * ccs = sigma_min / sigma = sigma_min * isigma.
+     */
+    ccs = fpr_mul(isigma, spc->sigma_min);
+
+    /*
+     * We now need to sample on center r.
+     */
+    for (;;)
+    {
+        int z0, z, b;
+        fpr x;
+
+        /*
+         * Sample z for a Gaussian distribution. Then get a
+         * random bit b to turn the sampling into a bimodal
+         * distribution: if b = 1, we use z+1, otherwise we
+         * use -z. We thus have two situations:
+         *
+         *  - b = 1: z >= 1 and sampled against a Gaussian
+         *    centered on 1.
+         *  - b = 0: z <= 0 and sampled against a Gaussian
+         *    centered on 0.
+         */
+        z0 = gaussian0_sampler(&spc->p);
+        b = (int)prng_get_u8(&spc->p) & 1;
+        z = b + ((b << 1) - 1) * z0;
+
+        /*
+         * Rejection sampling. We want a Gaussian centered on r;
+         * but we sampled against a Gaussian centered on b (0 or
+         * 1). But we know that z is always in the range where
+         * our sampling distribution is greater than the Gaussian
+         * distribution, so rejection works.
+         *
+         * We got z with distribution:
+         *    G(z) = exp(-((z-b)^2)/(2*sigma0^2))
+         * We target distribution:
+         *    S(z) = exp(-((z-r)^2)/(2*sigma^2))
+         * Rejection sampling works by keeping the value z with
+         * probability S(z)/G(z), and starting again otherwise.
+         * This requires S(z) <= G(z), which is the case here.
+         * Thus, we simply need to keep our z with probability:
+         *    P = exp(-x)
+         * where:
+         *    x = ((z-r)^2)/(2*sigma^2) - ((z-b)^2)/(2*sigma0^2)
+         *
+         * Here, we scale up the Bernouilli distribution, which
+         * makes rejection more probable, but makes rejection
+         * rate sufficiently decorrelated from the Gaussian
+         * center and standard deviation that the whole sampler
+         * can be said to be constant-time.
+         */
+        x = fpr_mul(fpr_sqr(fpr_sub(fpr_of(z), r)), dss);
+        x = fpr_sub(x, fpr_mul(fpr_of(z0 * z0), fpr_inv_2sqrsigma0));
+        if (BerExp(&spc->p, x, ccs))
+        {
+            /*
+             * Rejection sampling was centered on r, but the
+             * actual center is mu = s + r.
+             */
+            return s + z;
+        }
+    }
+}

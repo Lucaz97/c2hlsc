@@ -1,0 +1,32 @@
+int sampler(uint8_t prng_buf[512], size_t *prng_ptr, uint8_t prng_state[256],
+            fpr sigma_min, fpr mu, fpr isigma)
+{
+    int s;
+    fpr r, dss, ccs;
+
+    s = (int)fpr_floor(mu);
+    r = fpr_sub(mu, fpr_of(s));
+
+    dss = fpr_half(fpr_sqr(isigma));
+
+    ccs = fpr_mul(isigma, sigma_min);
+
+    for (;;)
+    {
+        int z0, z, b;
+        fpr x;
+
+        z0 = PQCLEAN_FALCONPADDED512_CLEAN_gaussian0_sampler(prng_buf, prng_ptr, prng_state);
+        b = (int)prng_get_u8(prng_buf, prng_ptr, prng_state) & 1;
+        z = b + ((b << 1) - 1) * z0;
+
+        x = fpr_mul(fpr_sqr(fpr_sub(fpr_of(z), r)), dss);
+        x = fpr_sub(x, fpr_mul(fpr_of(z0 * z0), fpr_inv_2sqrsigma0));
+        if (BerExp(prng_buf, prng_ptr, prng_state, x, ccs))
+        {
+            return s + z;
+        }
+    }
+}
+
+

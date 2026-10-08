@@ -900,12 +900,29 @@ def feedback_loop(message_list, cfg, postfix, synthesis_top): # message list sho
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
-                error = log.split("# Error:")[1]
+                # Get all the errors in the log without the first split(logs before the first error)
+                errors = log.split("# Error:")[1:]
+
+                error = errors[1]
+                
+                # Get the error that is not an internal assertion failed
+                for i, err in enumerate(errors):
+                    if "internal assertion failed" in err:
+                        continue
+                    else:
+                        error = err
+                        break
+
                 print("Error: ", error)
                 if "Floating-point"in error:
                     error += floating_point_prompt
                 elif "recursion" in error:
                     error += recursion_prompt
+                elif "No addressable objects found for pointer dereference" in error or "Unsupported field access on non-struct type" in error:
+                    remove_structs_prompt = f"""Update the code to elimiate the use of structs. To eliminate the use of structs, unpack their fields into plain variables within the {cfg.top_function} function and use the unpacked variables as arguments to the {cfg.top_function}_hls function. If the child functions of {cfg.top_function}_hls are using structs, modify them too and make the new child functions with name <original_function_name>_no_structs. Child functions should come before the parent function in the code. Do not add any includes. You should only provide me with the modified {cfg.top_function} function, {cfg.top_function}_hls function and modified child functions called by {cfg.top_function}_hls function. Do not change the function name of {cfg.top_function}_hls and {cfg.top_function}."""
+                    error += remove_structs_prompt
+                elif 'a value of type "void *" cannot be assigned to an entity of type' in error:
+                    error += type_casting_prompt
                 elif "pointer" in error:
                     error += pointer_prompt
 
@@ -969,7 +986,19 @@ def C2HLSC (cfg, optimize=False):
         with open("catapult.log", "r") as f:
             log = f.read()
             if "# Error:" in log:
-                error = log.split("# Error:")[1]
+                # Get all the errors in the log without the first split(logs before the first error)
+                errors = log.split("# Error:")[1:]
+
+                error = errors[1]
+                
+                # Get the error that is not an internal assertion failed
+                for i, err in enumerate(errors):
+                    if "internal assertion failed" in err:
+                        continue
+                    else:
+                        error = err
+                        break
+
                 print("Error: ", error, flush=True)
             else:
                 print(f"{cfg.top_function} is correct, does not need any changes",flush=True)
@@ -977,6 +1006,7 @@ def C2HLSC (cfg, optimize=False):
                 with open(f"{cfg.tmp_folder}{cfg.top_function}_to_opt.c", "w") as f:
                     f.write(code_to_fix)
                 cfg.postfix = ""
+                return code_to_fix
                 return HLSC_optimizer(cfg, code_to_fix, cfg.top_function)
         cfg.postfix = "_hls"
         
@@ -984,6 +1014,11 @@ def C2HLSC (cfg, optimize=False):
             error += floating_point_prompt
         elif "recursion" in error:
             error += recursion_prompt
+        elif "No addressable objects found for pointer dereference" in error or "Unsupported field access on non-struct type" in error:
+            remove_structs_prompt = f"""Update the code to elimiate the use of structs. To eliminate the use of structs, unpack their fields into plain variables within the {cfg.top_function} function and use the unpacked variables as arguments to the {cfg.top_function}_hls function. If the child functions of {cfg.top_function}_hls are using structs, modify them too and make the new child functions with name <original_function_name>_no_structs. Child functions should come before the parent function in the code. Do not add any includes. You should only provide me with the modified {cfg.top_function} function, {cfg.top_function}_hls function and modified child functions called by {cfg.top_function}_hls function."""
+            error += remove_structs_prompt
+        elif 'a value of type "void *" cannot be assigned to an entity of type' in error:
+            error += type_casting_prompt
         elif "pointer" in error:
             error += pointer_prompt
 
@@ -1023,6 +1058,7 @@ def C2HLSC (cfg, optimize=False):
     
     code_to_optimize = feedback_loop(message_list, cfg, "_to_opt", cfg.top_function+"_hls")
 
+    return code_to_optimize
     return HLSC_optimizer(cfg, code_to_optimize, cfg.top_function+"_hls")
                 
 
